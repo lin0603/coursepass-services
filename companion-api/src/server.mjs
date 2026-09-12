@@ -1,0 +1,66 @@
+import express from 'express';
+import cors from 'cors';
+import { z } from 'zod';
+import { config } from './config.mjs';
+import { knowledge } from './knowledgeClient.mjs';
+import { assemble } from './activities.mjs';
+import { store } from './db.mjs';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Optional bearer auth (disabled when COMPANION_API_TOKEN is unset).
+app.use((req, res, next) => {
+  if (!config.apiToken || req.path === '/healthz') return next();
+  if (req.headers.authorization === `Bearer ${config.apiToken}`) return next();
+  return res.status(401).json({ error: 'unauthorized' });
+});
+
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.get('/version', asyncHandler(async (_req, res) => {
+  res.json({ service: 'companion-api', version: '1.0.0', knowledge: await knowledge.version() });
+}));
+
+// --- Catalog (proxied, read-only) ---
+app.get('/v1/catalog/subjects', asyncHandler(async (_req, res) => res.json({ items: await knowledge.subjects() })));
+app.get('/v1/catalog/chapters', asyncHandler(async (req, res) => res.json(await knowledge.chapters(req.query))));
+app.get('/v1/catalog/search', asyncHandler(async (req, res) => res.json(await knowledge.search(req.query))));
+
+// --- Units (knowledge nodes) ---
+app.get('/v1/units', asyncHandler(async (req, res) => res.json(await knowledge.nodes(req.query))));
+app.get('/v1/units/:id', asyncHandler(async (req, res) => res.json(await knowledge.node(req.params.id))));
+
+// --- Activities for a unit (assembled from bound questions) ---
+app.get('/v1/units/:id/activities', asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
+  // Default: only teacher-approved questions. Dev can pass allowReviewRequired=1.
+  const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
+  const data = await knowledge.questions(req.params.id, { limit, offset: Number(req.query.offset) || 0, reviewStatus, type: req.query.type });
+  res.json({ unitId: req.params.id, total: data.total, items: assemble(data.items) });
+}));
+
+// --- Learner state ---
+const answerSchema = z.object({
+  sourceQuestionId: z.string().min(1),
+  nodeId: z.string().optional(),
+  selected: z.union([z.string(), z.array(z.string())]).optional(),
+  correct: z.boolean(),
+});
+
+app.get('/v1/learners/:learnerId/progress', asyncHandler(async (req, res) => res.json(store.getProgress(req.params.learnerId))));
+app.get('/v1/learners/:learnerId/wrongbook', asyncHandler(async (req, res) => res.json({ items: store.getWrongbook(req.params.learnerId) })));
+app.post('/v1/learners/:learnerId/answers', asyncHandler(async (req, res) => {
+  const parsed = answerSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  res.json(store.recordAnswer({ learnerId: req.params.learnerId, ...parsed.data }));
+}));
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(502).json({ error: 'upstream/service error', message: String(err.message || err) });
+});
+
+app.listen(config.port, () => console.log(JSON.stringify({ listening: config.port, knowledge: config.knowledgeBase, auth: Boolean(config.apiToken) })));

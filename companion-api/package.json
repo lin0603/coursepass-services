@@ -1,0 +1,16 @@
+{
+  "name": "coursepass-companion-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Clean standalone Companion API for CoursePass V4 (learners, progress, activities) on top of the Knowledge Service",
+  "scripts": {
+    "start": "node src/server.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "zod": "^3.23.8"
+  }
+}

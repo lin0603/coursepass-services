@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoursePass 出版社資源目錄索引</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <h1>出版社資源目錄索引</h1>
+        <p id="subtitle">載入中…</p>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="搜尋檔名／路徑（例如 月考卷、成語、quesdoc1CH）" autocomplete="off">
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="side-section">
+        <div class="side-title">資源包</div>
+        <div id="archives" class="archive-list"></div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="crumbs">
+        <button id="home" class="crumb">全部</button>
+        <span id="crumb-path"></span>
+      </div>
+      <div id="stats" class="stats"></div>
+
+      <div class="viewer">
+        <div class="tree-panel">
+          <div class="panel-title">目錄</div>
+          <div id="tree" class="tree"></div>
+        </div>
+        <div class="files-panel">
+          <div class="panel-title">
+            <span>檔案</span>
+            <span id="file-count" class="muted"></span>
+          </div>
+          <div id="folders" class="folder-chips"></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>檔案</th><th class="num">大小</th><th class="act"></th></tr></thead>
+              <tbody id="files"></tbody>
+            </table>
+          </div>
+          <div id="more" class="more"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="preview" class="preview-overlay" hidden>
+    <div class="preview-dialog">
+      <div class="preview-head">
+        <span id="preview-title"></span>
+        <span id="preview-note" class="preview-note"></span>
+        <button id="preview-close" class="preview-close">✕ 關閉</button>
+      </div>
+      <div id="preview-body" class="preview-body"></div>
+    </div>
+  </div>
+
+  <script src="./mammoth.browser.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
