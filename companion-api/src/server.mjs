@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { config } from './config.mjs';
 import { knowledge } from './knowledgeClient.mjs';
 import { assemble } from './activities.mjs';
+import { buildActivitySet } from './mixer.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -40,6 +41,14 @@ app.get('/v1/units/:id/activities', asyncHandler(async (req, res) => {
   const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
   const data = await knowledge.questions(req.params.id, { limit, offset: Number(req.query.offset) || 0, reviewStatus, type: req.query.type });
   res.json({ unitId: req.params.id, total: data.total, items: assemble(data.items) });
+}));
+
+// --- Mixed activity set for a unit (Duolingo-style session, activity layer Phase E) ---
+app.get('/v1/units/:id/activity-set', asyncHandler(async (req, res) => {
+  const count = Math.min(Math.max(Number(req.query.limit) || 10, 1), 20);
+  const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
+  const source = await knowledge.questions(req.params.id, { limit: 50, offset: 0, reviewStatus });
+  res.json({ unitId: req.params.id, count, total: source.total, items: buildActivitySet(source.items, { count }) });
 }));
 
 // --- Learner state ---

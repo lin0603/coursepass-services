@@ -176,3 +176,39 @@ export function toChoiceVariant(question, { count = 3 } = {}) {
     correctHtml: htmlForValue(parsed),
   };
 }
+
+// 真分數的等值分數配對（數學：擴分/約分表徵轉換）。
+// 取同一節點內相異的「真分數」答案，各自配一個擴分後的分數；值互異 → 唯一配對。
+export function buildMatching(questions, { pairCount = 4 } = {}) {
+  const seen = new Map();
+  for (const q of questions || []) {
+    const p = parseAnswer(q.answer);
+    if (!p || p.kind !== 'fraction' || p.whole) continue;
+    if (!p.den || p.den > 20 || p.value >= 2) continue;
+    const g = gcd(p.num, p.den);
+    const num = p.num / g;
+    const den = p.den / g;
+    if (num >= den) continue; // 僅真分數
+    const key = `${num}/${den}`;
+    if (!seen.has(key)) seen.set(key, { num, den });
+  }
+  const items = [...seen.values()];
+  if (items.length < pairCount) return null;
+  const pairs = items.slice(0, pairCount).map((r, i) => {
+    const k = 2 + (i % 3);
+    return {
+      left: `${r.num}/${r.den}`,
+      right: `${r.num * k}/${r.den * k}`,
+      leftHtml: mathmlFraction(0, r.num, r.den),
+      rightHtml: mathmlFraction(0, r.num * k, r.den * k),
+    };
+  });
+  return {
+    type: 'matching',
+    prompt: '把一樣大的分數連起來',
+    pairs,
+    generator: 'equivalent-fraction',
+    generatorVersion: '1.0.0',
+    confidence: 0.8,
+  };
+}
