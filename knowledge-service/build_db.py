@@ -13,6 +13,7 @@ Deterministic and re-runnable; records a data version hash in `meta`.
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -36,7 +37,9 @@ CREATE TABLE questions (
   id INTEGER PRIMARY KEY AUTOINCREMENT, sourceQuestionId TEXT, publisher TEXT,
   subject TEXT, grade INTEGER, questionType TEXT, difficulty TEXT, prompt TEXT,
   answer TEXT, primaryKnowledgeNodeId TEXT, reviewStatus TEXT, sourceId TEXT,
-  version TEXT, options_json TEXT, tags_json TEXT
+  version TEXT, image_url TEXT, options_json TEXT, tags_json TEXT,
+  prompt_html TEXT, answer_html TEXT, figure_url TEXT,
+  book TEXT, unit_title TEXT, lesson_code TEXT, has_figure INTEGER
 );
 CREATE TABLE coverage (
   publisher TEXT, subject TEXT, grade INTEGER, nodeId TEXT, total INTEGER, bound INTEGER, approved INTEGER,
@@ -69,7 +72,26 @@ def main():
     ap.add_argument("--graphs", type=Path, default=DEFAULT_GRAPHS)
     ap.add_argument("--bound", type=Path, default=CRAWLER / "out" / "bound")
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "knowledge.sqlite")
+    ap.add_argument("--assets", type=Path, default=None, help="JSON map sourceQuestionId -> image relative path")
+    ap.add_argument("--enrich", type=Path, default=None,
+                    help="preview JSON (items[]) with promptHtml/answerHtml/book/unit/section/hasFigure")
     args = ap.parse_args()
+    assets = json.loads(args.assets.read_text(encoding="utf-8")) if args.assets and args.assets.exists() else {}
+    enrich = {}
+    if args.enrich and args.enrich.exists():
+        for it in json.loads(args.enrich.read_text(encoding="utf-8")).get("items", []):
+            m = re.search(r'<img class="q-fig"[^>]*?src="([^"]+)"', it.get("promptHtml") or "")
+            enrich[it["id"]] = {
+                "prompt": it.get("prompt"),
+                "prompt_html": it.get("promptHtml"),
+                "answer_html": it.get("answerHtml"),
+                "answer": it.get("answer"),
+                "figure_url": m.group(1) if m else None,
+                "book": it.get("book"),
+                "unit_title": it.get("unit") or it.get("lesson"),
+                "lesson_code": it.get("section"),
+                "has_figure": 1 if it.get("hasFigure") else 0,
+            }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     if args.out.exists():
         args.out.unlink()
@@ -112,20 +134,27 @@ def main():
             subject = r.get("subject")
             grade = int(r.get("grade") or 0)
             node = r.get("primaryKnowledgeNodeId")
+            e = enrich.get(str(r.get("sourceQuestionId")), {})
+            ans = r.get("answer")
+            answer_val = e.get("answer") or (ans if isinstance(ans, str) else json.dumps(ans, ensure_ascii=False))
             db.execute(
-                "INSERT INTO questions (sourceQuestionId,publisher,subject,grade,questionType,difficulty,prompt,answer,primaryKnowledgeNodeId,reviewStatus,sourceId,version,options_json,tags_json)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO questions (sourceQuestionId,publisher,subject,grade,questionType,difficulty,prompt,answer,primaryKnowledgeNodeId,reviewStatus,sourceId,version,image_url,options_json,tags_json,prompt_html,answer_html,figure_url,book,unit_title,lesson_code,has_figure)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (r.get("sourceQuestionId"), pub, subject, grade, r.get("questionType"),
-                 r.get("difficulty") or r.get("difficultyRaw"), r.get("prompt"), json.dumps(r.get("answer"), ensure_ascii=False),
+                 r.get("difficulty") or r.get("difficultyRaw"),
+                 e.get("prompt") or r.get("prompt"), answer_val,
                  node, r.get("reviewStatus") or "review_required", r.get("sourceId"), r.get("version"),
+                 assets.get(str(r.get("sourceQuestionId"))),
                  json.dumps(r.get("options") or [], ensure_ascii=False),
-                 json.dumps(r.get("tags") or [], ensure_ascii=False)),
+                 json.dumps(r.get("tags") or [], ensure_ascii=False),
+                 e.get("prompt_html"), e.get("answer_html"), e.get("figure_url"),
+                 e.get("book"), e.get("unit_title"), e.get("lesson_code"), e.get("has_figure")),
             )
             q_count += 1
-            unit = r.get("unitTitle") or r.get("lessonTitle") or ""
+            unit = e.get("unit_title") or r.get("unitTitle") or r.get("lessonTitle") or ""
             if unit:
-                chapter_seen[(pub, subject, grade, unit, r.get("lessonCode") or "")] = \
-                    chapter_seen.get((pub, subject, grade, unit, r.get("lessonCode") or ""), 0) + 1
+                chapter_seen[(pub, subject, grade, unit, e.get("lesson_code") or r.get("lessonCode") or "")] = \
+                    chapter_seen.get((pub, subject, grade, unit, e.get("lesson_code") or r.get("lessonCode") or ""), 0) + 1
             if node:
                 key = (pub, subject, grade, node)
                 c = coverage.setdefault(key, {"total": 0, "bound": 0, "approved": 0})
