@@ -40,7 +40,8 @@ app.get('/v1/units/:id/activities', asyncHandler(async (req, res) => {
   // Default: only teacher-approved questions. Dev can pass allowReviewRequired=1.
   const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
   const data = await knowledge.questions(req.params.id, { limit, offset: Number(req.query.offset) || 0, reviewStatus, type: req.query.type });
-  res.json({ unitId: req.params.id, total: data.total, items: assemble(data.items) });
+  const items = data.items.map((q) => ({ ...q, primaryKnowledgeNodeId: q.primaryKnowledgeNodeId || req.params.id }));
+  res.json({ unitId: req.params.id, total: data.total, items: assemble(items) });
 }));
 
 // --- Mixed activity set for a unit (Duolingo-style session, activity layer Phase E) ---
@@ -54,7 +55,7 @@ app.get('/v1/units/:id/activity-set', asyncHandler(async (req, res) => {
   for (let page = 0; page < 3; page++) {
     const chunk = await knowledge.questions(req.params.id, { limit: 200, offset, reviewStatus });
     total = chunk.total;
-    pool.push(...(chunk.items || []));
+    pool.push(...(chunk.items || []).map((q) => ({ ...q, primaryKnowledgeNodeId: q.primaryKnowledgeNodeId || req.params.id })));
     if (!Array.isArray(chunk.items) || chunk.items.length < 200) break;
     offset += 200;
   }
