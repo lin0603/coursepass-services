@@ -61,9 +61,9 @@ app.get('/v1/nodes/:id/questions', (req, res) => {
   if (req.query.type) { where.push('questionType = ?'); params.push(req.query.type); }
   if (req.query.reviewStatus) { where.push('reviewStatus = ?'); params.push(req.query.reviewStatus); }
   const clause = `WHERE ${where.join(' AND ')}`;
-  const rows = db.prepare(`SELECT sourceQuestionId, publisher, subject, grade, questionType, difficulty, prompt, answer, options_json, reviewStatus FROM questions ${clause} ORDER BY publisher, grade LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  const rows = db.prepare(`SELECT sourceQuestionId, publisher, subject, grade, questionType, difficulty, prompt, answer, options_json, image_url, reviewStatus FROM questions ${clause} ORDER BY publisher, grade LIMIT ? OFFSET ?`).all(...params, limit, offset);
   const total = db.prepare(`SELECT COUNT(*) AS n FROM questions ${clause}`).get(...params).n;
-  res.json({ total, limit, offset, items: rows.map((r) => ({ ...r, options: JSON.parse(r.options_json || '[]'), options_json: undefined })) });
+  res.json({ total, limit, offset, items: rows.map((r) => ({ ...r, options: JSON.parse(r.options_json || '[]'), imageUrl: r.image_url || null, options_json: undefined, image_url: undefined })) });
 });
 
 app.get('/v1/chapters', (req, res) => {

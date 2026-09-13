@@ -56,6 +56,7 @@ export function toActivity(question) {
     prompt: question.prompt,
     options,
     answer,
+    imageUrl: question.imageUrl || null,
     explanation: question.explanation || '',
     reviewStatus: question.reviewStatus,
     playable,
