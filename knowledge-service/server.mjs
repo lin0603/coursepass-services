@@ -11,7 +11,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((r) => [r.key, r.value]));
+function readMeta() {
+  return Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((r) => [r.key, r.value]));
+}
+const meta0 = readMeta();
 
 function int(value, fallback, max) {
   const n = Number.parseInt(value, 10);
@@ -20,10 +23,11 @@ function int(value, fallback, max) {
 }
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
-app.get('/version', (_req, res) => res.json(meta));
+app.get('/version', (_req, res) => res.json(readMeta()));
 
 app.get('/v1/subjects', (_req, res) => {
-  res.json(meta.subjects ? meta.subjects.split(',') : []);
+  const subjects = readMeta().subjects;
+  res.json(subjects ? subjects.split(',') : []);
 });
 
 app.get('/v1/nodes', (req, res) => {
@@ -93,4 +97,4 @@ app.get('/v1/search', (req, res) => {
   res.json({ items: db.prepare(`SELECT n.id, n.subject, n.grade, n.name FROM nodes n WHERE ${clause} LIMIT 50`).all(...params) });
 });
 
-app.listen(PORT, () => console.log(JSON.stringify({ listening: PORT, data: DATA, version: meta.version })));
+app.listen(PORT, () => console.log(JSON.stringify({ listening: PORT, data: DATA, version: meta0.version })));
