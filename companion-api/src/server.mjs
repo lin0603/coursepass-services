@@ -47,7 +47,7 @@ app.get('/v1/units/:id/activities', asyncHandler(async (req, res) => {
 app.get('/v1/units/:id/activity-set', asyncHandler(async (req, res) => {
   const count = Math.min(Math.max(Number(req.query.limit) || 10, 1), 20);
   const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
-  const source = await knowledge.questions(req.params.id, { limit: 50, offset: 0, reviewStatus });
+  const source = await knowledge.questions(req.params.id, { limit: 200, offset: 0, reviewStatus });
   res.json({ unitId: req.params.id, count, total: source.total, items: buildActivitySet(source.items, { count }) });
 }));
 
