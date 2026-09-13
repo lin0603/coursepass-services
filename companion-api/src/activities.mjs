@@ -1,5 +1,6 @@
 // Map a bound question to a companion activity contract.
 import { config } from './config.mjs';
+import { escapeHtml, htmlForValue, parseAnswer, toChoiceVariant } from './generate.mjs';
 
 function fileUrl(rel) {
   if (!rel) return null;
@@ -86,6 +87,17 @@ export function toActivity(question) {
     ((type === 'choice' && options.length >= 2 && correctIndex !== null) ||
       (type === 'fill_blank' && Boolean(String(answer ?? '').trim())));
 
+  // 數學選項以 MathML 呈現（分數堆疊），非數學則轉義純文字。
+  const optionsHtml = type === 'choice'
+    ? options.map((o) => {
+        const p = parseAnswer(o);
+        return p ? htmlForValue(p) : escapeHtml(o);
+      })
+    : null;
+
+  // 由短答/填空生成 choice 變體（規則誘答；教育正確顯示）。
+  const choiceVariant = toChoiceVariant(question);
+
   return {
     activityId: `q:${question.sourceQuestionId}`,
     sourceQuestionId: question.sourceQuestionId,
@@ -97,6 +109,7 @@ export function toActivity(question) {
     prompt: question.prompt,
     promptHtml: question.promptHtml || null,
     options,
+    optionsHtml,
     correctIndex,
     answer,
     answerHtml: question.answerHtml || null,
@@ -107,6 +120,7 @@ export function toActivity(question) {
     audioLocale: null,
     expectedText: null,
     speechLocale: null,
+    variants: choiceVariant ? { choice: choiceVariant } : null,
     imageUrl: fileUrl(question.imageUrl),
     figureUrl: question.figureUrl || null,
     hasFigure: Boolean(question.hasFigure),
