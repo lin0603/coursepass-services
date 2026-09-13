@@ -5,6 +5,7 @@ function fileUrl(rel) {
   if (!rel) return null;
   return `${config.filesBase}/${String(rel).split('/').map(encodeURIComponent).join('/')}`;
 }
+
 const ACTIVITY_BY_TYPE = {
   multiple_choice: 'choice',
   true_false: 'choice',
@@ -30,25 +31,59 @@ function isTrueAnswer(value) {
   return null;
 }
 
+// 選項顯示文字：支援 {label,content,isCorrect} 與純字串兩種來源。
+export function optionText(option) {
+  if (option && typeof option === 'object') {
+    return String(option.content ?? option.text ?? option.label ?? '').trim();
+  }
+  return String(option ?? '').trim();
+}
+
+// 由 option.isCorrect / answer(1-based index、label、選項文字) 推出 0-based correctIndex。
+export function resolveCorrectIndex(options, rawOptions, answer) {
+  const flagged = rawOptions.findIndex((o) => o && typeof o === 'object' && o.isCorrect === true);
+  if (flagged >= 0) return flagged;
+  const n = Number(String(answer ?? '').trim());
+  if (Number.isInteger(n) && n >= 1 && n <= options.length) return n - 1;
+  const label = String(answer ?? '').trim().toUpperCase();
+  if (/^[A-Z]$/.test(label)) {
+    const i = rawOptions.findIndex((o) => o && typeof o === 'object' && String(o.label ?? '').toUpperCase() === label);
+    if (i >= 0) return i;
+  }
+  const text = String(answer ?? '').trim();
+  const i = options.findIndex((o) => o === text);
+  return i >= 0 ? i : null;
+}
+
 export function toActivity(question) {
   const rawType = String(question.questionType || '').trim();
   let type = activityType(rawType);
-  let options = (question.options || []).map((o) => o.content ?? o).filter((o) => String(o).trim());
+  const rawOptions = Array.isArray(question.options) ? question.options : [];
+  let options = rawOptions.map(optionText).filter((o) => o !== '');
   let answer = question.answer;
 
-  // 是非題（或多數把答案記成 ○/╳ 但選項空的題）→ 選擇題，合成「正確 / 錯誤」
+  // 是非題（或答案記成 ○/╳ 但選項空的題）→ 選擇題，合成「正確 / 錯誤」
+  const truth = isTrueAnswer(question.answer);
+  let synthesized = false;
   if (rawType === 'true_false' || (type === 'choice' && options.length < 2)) {
-    const truth = isTrueAnswer(question.answer);
     if (rawType === 'true_false' || truth !== null) {
+      synthesized = true;
       type = 'choice';
       options = ['正確', '錯誤'];
       answer = truth === null ? '' : (truth ? '正確' : '錯誤');
     }
   }
 
+  let correctIndex = null;
+  if (type === 'choice') {
+    correctIndex = synthesized
+      ? (truth === null ? null : (truth ? 0 : 1))
+      : resolveCorrectIndex(options, rawOptions, question.answer);
+  }
+
   const playable =
     Boolean(question.prompt) &&
-    ((type === 'choice' && options.length >= 2 && Boolean(answer)) ||
+    ((type === 'choice' && options.length >= 2 && correctIndex !== null) ||
       (type === 'fill_blank' && Boolean(String(answer ?? '').trim())));
 
   return {
@@ -62,8 +97,16 @@ export function toActivity(question) {
     prompt: question.prompt,
     promptHtml: question.promptHtml || null,
     options,
+    correctIndex,
     answer,
     answerHtml: question.answerHtml || null,
+    placeholder: null,
+    words: null,
+    pairs: null,
+    audioText: null,
+    audioLocale: null,
+    expectedText: null,
+    speechLocale: null,
     imageUrl: fileUrl(question.imageUrl),
     figureUrl: question.figureUrl || null,
     hasFigure: Boolean(question.hasFigure),

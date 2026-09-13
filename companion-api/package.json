@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Clean standalone Companion API for CoursePass V4 (learners, progress, activities) on top of the Knowledge Service",
   "scripts": {
-    "start": "node src/server.mjs"
+    "start": "node src/server.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",
