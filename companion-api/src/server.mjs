@@ -47,8 +47,18 @@ app.get('/v1/units/:id/activities', asyncHandler(async (req, res) => {
 app.get('/v1/units/:id/activity-set', asyncHandler(async (req, res) => {
   const count = Math.min(Math.max(Number(req.query.limit) || 10, 1), 20);
   const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
-  const source = await knowledge.questions(req.params.id, { limit: 200, offset: 0, reviewStatus });
-  res.json({ unitId: req.params.id, count, total: source.total, items: buildActivitySet(source.items, { count }) });
+  // Pool up to 3 pages so later questions (e.g. fraction answers for matching) are included.
+  const pool = [];
+  let offset = 0;
+  let total = 0;
+  for (let page = 0; page < 3; page++) {
+    const chunk = await knowledge.questions(req.params.id, { limit: 200, offset, reviewStatus });
+    total = chunk.total;
+    pool.push(...(chunk.items || []));
+    if (!Array.isArray(chunk.items) || chunk.items.length < 200) break;
+    offset += 200;
+  }
+  res.json({ unitId: req.params.id, count, total, items: buildActivitySet(pool, { count }) });
 }));
 
 // --- Learner state ---
