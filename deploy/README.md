@@ -8,6 +8,17 @@
 | coursepass-companion-api | `companion-api` | 8080 | `DATA_DIR=/app/data`、`KNOWLEDGE_BASE=http://coursepass-knowledge-service:8080`、`COMPANION_API_TOKEN` | host `/srv/coursepass/companion-data` → `/app/data` (rw) | companion-api-dev.starxinteractive.com |
 | coursepass-resource-files | `resource-files-server` | 80 | — | host `/hdd/coursepass-resource-files` → `/usr/share/nginx/html` (ro) | resource-files-dev.starxinteractive.com |
 | coursepass-resource-index | `index-site` | 80 | — | — | resource-index-dev.starxinteractive.com |
+| coursepass-figure-tikz | `figure-tikz` | 8390 | — | — | 僅內網（別名 `coursepass-figure-tikz`） |
+| coursepass-figure-asymptote | `figure-asymptote` | 8391 | — | — | 僅內網（別名 `coursepass-figure-asymptote`） |
+
+## 題圖編譯服務（Tier 2/3）
+
+- `figure-tikz`：TikZ＋tkz-euclide → `xelatex` → `dvisvgm --no-fonts` → SVG（CJK 轉路徑）。
+- `figure-asymptote`：Asymptote → SVG。
+- 基底為 `texlive/texlive`；兩者僅內網，供 figure-service 以
+  `COMPILE_TIKZ_URL=http://coursepass-figure-tikz:8390/compile`、
+  `COMPILE_ASY_URL=http://coursepass-figure-asymptote:8391/compile` 呼叫。
+- 健康檢查：`GET /health`。
 
 ## 自動部署
 - Coolify Application → Source：Public GitHub，repo `lin0603/coursepass-services`，branch `develop`。
