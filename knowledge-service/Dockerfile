@@ -8,7 +8,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY server.mjs package.json ./
 # Data is NOT baked into the image. Mount the built SQLite at /app/data (volume).
-RUN mkdir -p /app/data
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* && mkdir -p /app/data
 ENV PORT=8080
 ENV DATA=/app/data/knowledge.sqlite
 EXPOSE 8080

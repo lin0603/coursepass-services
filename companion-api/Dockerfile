@@ -8,7 +8,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
 COPY package.json ./
-RUN mkdir -p /app/data
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* && mkdir -p /app/data
 ENV PORT=8080
 ENV DATA_DIR=/app/data
 EXPOSE 8080
