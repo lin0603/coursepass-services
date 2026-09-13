@@ -1,4 +1,10 @@
 // Map a bound question to a companion activity contract.
+import { config } from './config.mjs';
+
+function fileUrl(rel) {
+  if (!rel) return null;
+  return `${config.filesBase}/${String(rel).split('/').map(encodeURIComponent).join('/')}`;
+}
 const ACTIVITY_BY_TYPE = {
   multiple_choice: 'choice',
   true_false: 'choice',
@@ -56,7 +62,7 @@ export function toActivity(question) {
     prompt: question.prompt,
     options,
     answer,
-    imageUrl: question.imageUrl || null,
+    imageUrl: fileUrl(question.imageUrl),
     explanation: question.explanation || '',
     reviewStatus: question.reviewStatus,
     playable,

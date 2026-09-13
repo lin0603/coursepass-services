@@ -6,6 +6,7 @@ export const config = {
   knowledgeBase: (process.env.KNOWLEDGE_BASE || 'https://knowledge-api-dev.starxinteractive.com').replace(/\/$/, ''),
   dataDir: process.env.DATA_DIR || '/app/data',
   apiToken: process.env.COMPANION_API_TOKEN || '', // optional bearer for non-dev
+  filesBase: (process.env.FILES_BASE || 'https://resource-files-dev.starxinteractive.com').replace(/\/$/, ''),
 };
 
 fs.mkdirSync(config.dataDir, { recursive: true });
