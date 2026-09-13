@@ -30,17 +30,20 @@ export function toActivity(question) {
   let options = (question.options || []).map((o) => o.content ?? o).filter((o) => String(o).trim());
   let answer = question.answer;
 
-  // 是非題 → 選擇題（合成「正確 / 錯誤」選項）
-  if (rawType === 'true_false') {
+  // 是非題（或多數把答案記成 ○/╳ 但選項空的題）→ 選擇題，合成「正確 / 錯誤」
+  if (rawType === 'true_false' || (type === 'choice' && options.length < 2)) {
     const truth = isTrueAnswer(question.answer);
-    type = 'choice';
-    options = ['正確', '錯誤'];
-    answer = truth === null ? '' : (truth ? '正確' : '錯誤');
+    if (rawType === 'true_false' || truth !== null) {
+      type = 'choice';
+      options = ['正確', '錯誤'];
+      answer = truth === null ? '' : (truth ? '正確' : '錯誤');
+    }
   }
 
   const playable =
     Boolean(question.prompt) &&
-    (type === 'choice' ? options.length >= 2 && Boolean(answer) : type === 'matching' ? false : true);
+    ((type === 'choice' && options.length >= 2 && Boolean(answer)) ||
+      (type === 'fill_blank' && Boolean(String(answer ?? '').trim())));
 
   return {
     activityId: `q:${question.sourceQuestionId}`,
