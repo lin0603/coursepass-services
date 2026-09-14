@@ -53,6 +53,23 @@ app.get('/v1/nodes/:id', (req, res) => {
   res.json({ node, edges, coverage });
 });
 
+const QUESTION_COLUMNS = 'sourceQuestionId, publisher, subject, grade, questionType, difficulty, prompt, answer, options_json, image_url, reviewStatus, prompt_html, answer_html, figure_url, book, unit_title, lesson_code, has_figure, primaryKnowledgeNodeId';
+
+function shapeQuestion(r) {
+  return {
+    ...r,
+    options: JSON.parse(r.options_json || '[]'),
+    options_json: undefined,
+    hasFigure: Boolean(r.has_figure),
+    imageUrl: r.image_url || null,
+    promptHtml: r.prompt_html || null,
+    answerHtml: r.answer_html || null,
+    figureUrl: r.figure_url || null,
+    nodeId: r.primaryKnowledgeNodeId || null,
+    chapter: [r.book, r.unit_title, r.lesson_code].filter(Boolean).join(' ・ ') || null,
+  };
+}
+
 app.get('/v1/nodes/:id/questions', (req, res) => {
   const limit = int(req.query.limit, 20, 200);
   const offset = int(req.query.offset, 0);
@@ -61,20 +78,42 @@ app.get('/v1/nodes/:id/questions', (req, res) => {
   if (req.query.type) { where.push('questionType = ?'); params.push(req.query.type); }
   if (req.query.reviewStatus) { where.push('reviewStatus = ?'); params.push(req.query.reviewStatus); }
   const clause = `WHERE ${where.join(' AND ')}`;
-  const rows = db.prepare(`SELECT sourceQuestionId, publisher, subject, grade, questionType, difficulty, prompt, answer, options_json, image_url, reviewStatus, prompt_html, answer_html, figure_url, book, unit_title, lesson_code, has_figure FROM questions ${clause} ORDER BY publisher, grade LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  const rows = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions ${clause} ORDER BY publisher, grade LIMIT ? OFFSET ?`).all(...params, limit, offset);
   const total = db.prepare(`SELECT COUNT(*) AS n FROM questions ${clause}`).get(...params).n;
-  res.json({ total, limit, offset, items: rows.map((r) => ({
-    ...r,
-    options: JSON.parse(r.options_json || '[]'),
-    options_json: undefined,
-    image_url: undefined,
-    hasFigure: Boolean(r.has_figure),
-    imageUrl: r.image_url || null,
-    promptHtml: r.prompt_html || null,
-    answerHtml: r.answer_html || null,
-    figureUrl: r.figure_url || null,
-    chapter: [r.book, r.unit_title, r.lesson_code].filter(Boolean).join(' ・ ') || null,
-  })) });
+  res.json({ total, limit, offset, items: rows.map(shapeQuestion) });
+});
+
+// Single question by its source id (for wrongbook / bookmarks / deep links).
+app.get('/v1/questions/:sourceQuestionId', (req, res) => {
+  const row = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE sourceQuestionId = ?`).get(req.params.sourceQuestionId);
+  if (!row) return res.status(404).json({ error: 'question not found' });
+  res.json(shapeQuestion(row));
+});
+
+// Ordered learning path for a subject/grade (curriculum topic order, then id order).
+const TOPIC_ORDER = ['數與量', '關係', '空間與形狀', '資料與不確定性'];
+app.get('/v1/paths', (req, res) => {
+  const { subject, grade } = req.query;
+  if (!subject) return res.status(400).json({ error: 'subject required' });
+  const where = ['subject = ?'];
+  const params = [subject];
+  if (grade) { where.push('grade = ?'); params.push(String(grade)); }
+  const rows = db.prepare(`SELECT id, subject, grade, name, topic, main_topic FROM nodes WHERE ${where.join(' AND ')}`).all(...params);
+  const natural = (id) => { const m = String(id).match(/(\d+)$/); return m ? Number(m[1]) : 0; };
+  rows.sort((a, b) => {
+    const ta = TOPIC_ORDER.indexOf(a.topic); const tb = TOPIC_ORDER.indexOf(b.topic);
+    if (ta !== tb) return (ta < 0 ? 99 : ta) - (tb < 0 ? 99 : tb);
+    const pa = String(a.id).replace(/\d+$/, ''); const pb = String(b.id).replace(/\d+$/, '');
+    if (pa !== pb) return pa < pb ? -1 : 1;
+    return natural(a.id) - natural(b.id);
+  });
+  const groups = [];
+  const byTopic = new Map();
+  for (const r of rows) {
+    if (!byTopic.has(r.topic)) { const g = { topic: r.topic, nodes: [] }; byTopic.set(r.topic, g); groups.push(g); }
+    byTopic.get(r.topic).nodes.push(r);
+  }
+  res.json({ subject, grade: grade ? String(grade) : null, order: rows.map((r) => r.id), groups });
 });
 
 app.get('/v1/chapters', (req, res) => {

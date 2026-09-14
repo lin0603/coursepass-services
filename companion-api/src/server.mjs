@@ -5,6 +5,7 @@ import { config } from './config.mjs';
 import { knowledge } from './knowledgeClient.mjs';
 import { assemble } from './activities.mjs';
 import { buildActivitySet } from './mixer.mjs';
+import { groupByTopic } from './path.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -62,6 +63,19 @@ app.get('/v1/units/:id/activity-set', asyncHandler(async (req, res) => {
   res.json({ unitId: req.params.id, count, total, items: buildActivitySet(pool, { count }) });
 }));
 
+// --- Learning path for a unit's subject/grade, with learner status (Phase P1) ---
+app.get('/v1/units/:id/path', asyncHandler(async (req, res) => {
+  const info = await knowledge.node(req.params.id);
+  const node = info && info.node ? info.node : {};
+  const [paths, progress] = await Promise.all([
+    knowledge.paths({ subject: node.subject, grade: node.grade }),
+    Promise.resolve(req.query.learner ? store.getProgress(req.query.learner) : { nodes: [] }),
+  ]);
+  const progressByNode = Object.fromEntries((progress.nodes || []).map((n) => [n.nodeId, n]));
+  const result = groupByTopic(paths.groups || [], progressByNode);
+  res.json({ unitId: req.params.id, subject: node.subject, grade: node.grade, ...result });
+}));
+
 // --- Learner state ---
 const answerSchema = z.object({
   sourceQuestionId: z.string().min(1),
@@ -71,7 +85,21 @@ const answerSchema = z.object({
 });
 
 app.get('/v1/learners/:learnerId/progress', asyncHandler(async (req, res) => res.json(store.getProgress(req.params.learnerId))));
-app.get('/v1/learners/:learnerId/wrongbook', asyncHandler(async (req, res) => res.json({ items: store.getWrongbook(req.params.learnerId) })));
+app.get('/v1/learners/:learnerId/wrongbook', asyncHandler(async (req, res) => {
+  const rows = store.getWrongbook(req.params.learnerId);
+  if (req.query.detail !== '1') return res.json({ items: rows });
+  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+  const items = await Promise.all(rows.slice(0, limit).map(async (row) => {
+    try {
+      const q = await knowledge.question(row.sourceQuestionId);
+      const activity = assemble([{ ...q, primaryKnowledgeNodeId: q.nodeId || row.nodeId }])[0];
+      return { ...row, question: activity };
+    } catch {
+      return { ...row, question: null };
+    }
+  }));
+  res.json({ items });
+}));
 app.post('/v1/learners/:learnerId/answers', asyncHandler(async (req, res) => {
   const parsed = answerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
