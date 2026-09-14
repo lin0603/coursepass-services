@@ -43,6 +43,22 @@ test('adaptSet tolerates missing items', () => {
   assert.deepEqual(adaptSet(), []);
 });
 
+test('toPlayerActivity keeps question image and figure distinct', () => {
+  const a = toPlayerActivity({
+    sourceQuestionId: 'EMA1', type: 'choice', prompt: 'p', options: ['a', 'b'], correctIndex: 0,
+    imageUrl: 'https://x/q.png', figureUrl: 'https://x/fig.svg', hasFigure: true,
+  });
+  assert.equal(a.questionImageUrl, 'https://x/q.png');
+  assert.equal(a.imageUrl, 'https://x/q.png');
+  assert.equal(a.figureUrl, 'https://x/fig.svg');
+});
+
+test('toPlayerActivity uses questionImageUrl alias when provided', () => {
+  const a = toPlayerActivity({ sourceQuestionId: 'EMA1', type: 'fill_blank', prompt: 'p', questionImageUrl: 'https://x/new.png' });
+  assert.equal(a.questionImageUrl, 'https://x/new.png');
+  assert.equal(a.imageUrl, 'https://x/new.png');
+});
+
 test('toAnswerRecord shapes the companion-api payload', () => {
   const rec = toAnswerRecord(toPlayerActivity({ sourceQuestionId: 'EMA1', nodeId: 'N-5-4', prompt: 'p' }), 2, true);
   assert.deepEqual(rec, { sourceQuestionId: 'EMA1', nodeId: 'N-5-4', selected: 2, correct: true });

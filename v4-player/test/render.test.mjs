@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  escapeHtml, promptHtml, optionHtml, figureHtml, choiceHtml, matchingHtml, activityCardHtml,
+  escapeHtml, promptHtml, optionHtml, figureHtml, questionImageHtml, choiceHtml, matchingHtml, activityCardHtml,
 } from '../src/render.mjs';
 
 const frac = '<math xmlns="http://www.w3.org/1998/Math/MathML"><mfrac><mrow><mn>6</mn></mrow><mrow><mn>11</mn></mrow></mfrac></math>';
@@ -32,9 +32,22 @@ test('figureHtml does not show the whole-question image when promptHtml exists',
   assert.equal(figureHtml({ promptHtml: '純文字題', imageUrl: 'https://x/q.png' }), '');
 });
 
-test('figureHtml falls back to imageUrl only without promptHtml (legacy)', () => {
-  const html = figureHtml({ promptHtml: null, imageUrl: 'https://x/q.png' });
+test('figureHtml never uses the whole-question image', () => {
+  assert.equal(figureHtml({ promptHtml: null, imageUrl: 'https://x/q.png' }), '');
+});
+
+test('questionImageHtml renders a collapsed reference of the whole question', () => {
+  const html = questionImageHtml({ questionImageUrl: 'https://x/q.png' });
+  assert.match(html, /<details/);
   assert.match(html, /題目原圖/);
+  assert.match(html, /<img src="https:\/\/x\/q\.png"/);
+  assert.equal(questionImageHtml({}), '');
+});
+
+test('questionImageHtml prefers questionImageUrl over imageUrl alias', () => {
+  const html = questionImageHtml({ questionImageUrl: 'https://x/new.png', imageUrl: 'https://x/old.png' });
+  assert.match(html, /https:\/\/x\/new\.png/);
+  assert.ok(!html.includes('old.png'));
 });
 
 test('choiceHtml emits one button per option with indices', () => {

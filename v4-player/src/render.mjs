@@ -22,15 +22,19 @@ export function optionHtml(activity, index) {
 
 export function figureHtml(activity) {
   const html = activity.promptHtml || '';
-  // 圖已內嵌在題幹 → 不再另外貼圖（避免重複）。
+  // 題目內的圖已內嵌在題幹（promptHtml 的 <img class="q-fig">）→ 不再另外貼。
   if (html.includes('<img')) return '';
-  // 有獨立重繪圖（figureUrl）才顯示。
+  // 題內圖若只有 figureUrl（未內嵌）才顯示。
   if (activity.figureUrl) return `<figure class="q-figure"><img src="${escapeHtml(activity.figureUrl)}" alt="題目附圖" loading="lazy"></figure>`;
-  // 只有在完全沒有題幹 HTML（未 enrich 的舊資料）時，才退回整題原圖。
-  if (!activity.promptHtml && activity.imageUrl) {
-    return `<figure class="q-figure"><img src="${escapeHtml(activity.imageUrl)}" alt="題目原圖" loading="lazy"></figure>`;
-  }
   return '';
+}
+
+// 題目原圖（整題掃描）：與題內圖不同，僅供核對；預設收合。
+export function questionImageHtml(activity) {
+  const src = activity.questionImageUrl || activity.imageUrl;
+  if (!src) return '';
+  return `<details class="q-original"><summary>看題目原圖（整題，僅供核對）</summary>
+    <img src="${escapeHtml(src)}" alt="題目原圖" loading="lazy"></details>`;
 }
 
 export function choiceHtml(activity) {
@@ -67,5 +71,6 @@ export function activityCardHtml(activity) {
     <div class="prompt">${promptHtml(activity)}</div>
     ${figureHtml(activity)}
     ${body}
+    ${questionImageHtml(activity)}
     ${activity.chapter ? `<p class="small-note">${escapeHtml(activity.chapter)}</p>` : ''}`;
 }

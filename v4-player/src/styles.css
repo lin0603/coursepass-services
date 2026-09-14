@@ -94,3 +94,8 @@ mfrac { vertical-align: middle; }
 .path-stop.completed .path-badge { background: #cfe8dd; color: var(--ok); }
 .path-name { display: flex; flex-direction: column; }
 .path-name small { color: var(--muted); font-size: 12px; }
+
+/* 題目原圖（整題）參照，與題內圖區隔；預設收合 */
+.q-original { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.q-original summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.q-original img { margin-top: 8px; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }

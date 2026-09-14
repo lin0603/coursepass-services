@@ -24,7 +24,9 @@ export function toPlayerActivity(raw = {}, index = 0) {
     expectedText: raw.expectedText || null,
     speechLocale: raw.speechLocale || null,
     figureUrl: raw.figureUrl || null,
-    imageUrl: raw.imageUrl || null,
+    // 題目原圖（整題）— 與題內圖（figureUrl / promptHtml 內嵌）不同
+    questionImageUrl: raw.questionImageUrl || raw.imageUrl || null,
+    imageUrl: raw.imageUrl || raw.questionImageUrl || null,
     hasFigure: Boolean(raw.hasFigure),
     chapter: raw.chapter || null,
     explanation: raw.explanation || '',

@@ -121,7 +121,11 @@ export function toActivity(question) {
     expectedText: null,
     speechLocale: null,
     variants: choiceVariant ? { choice: choiceVariant } : null,
-    imageUrl: fileUrl(question.imageUrl),
+    // 兩種圖不同，勿混淆：
+    //  questionImageUrl = 題目原圖（整題，含文字/算式，康軒 100% 有；僅供核對）
+    //  figureUrl        = 題目內的圖（第一張；全部題內圖已內嵌於 promptHtml）
+    questionImageUrl: fileUrl(question.imageUrl),
+    imageUrl: fileUrl(question.imageUrl), // 舊欄位，保留相容
     figureUrl: question.figureUrl || null,
     hasFigure: Boolean(question.hasFigure),
     chapter: question.chapter || null,
