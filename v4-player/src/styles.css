@@ -77,3 +77,20 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--teal); outl
 /* Native MathML sizing */
 math { font-size: 1.15em; }
 mfrac { vertical-align: middle; }
+
+/* Learning map */
+.map-head { margin-bottom: 12px; }
+.map-head h2 { margin: 4px 0; }
+.map-group { margin: 18px 0; }
+.map-topic { font-size: 14px; color: var(--muted); margin: 0 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.path { display: grid; gap: 10px; }
+.path-stop { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border: 2px solid #dbe5e2; border-radius: 16px; background: #fff; font: inherit; color: var(--ink); cursor: pointer; }
+.path-stop:hover { border-color: var(--teal); }
+.path-stop.current { border-color: var(--teal); background: #eff8f8; }
+.path-stop.completed { background: #f4fafa; }
+.path-stop.locked { opacity: .6; }
+.path-badge { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #e3eeec; color: var(--teal-dark); font-size: 18px; font-weight: 800; }
+.path-stop.current .path-badge { background: var(--teal); color: #fff; }
+.path-stop.completed .path-badge { background: #cfe8dd; color: var(--ok); }
+.path-name { display: flex; flex-direction: column; }
+.path-name small { color: var(--muted); font-size: 12px; }
