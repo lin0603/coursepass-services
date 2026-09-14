@@ -1,0 +1,79 @@
+:root {
+  --teal: #087e8b;
+  --teal-dark: #056672;
+  --ink: #284c52;
+  --muted: #536c72;
+  --line: #dce7e5;
+  --bg: #fbfcfa;
+  --ok: #236251;
+  --warn: #a6403b;
+  --gold: #e9b95b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: start center;
+  padding: 24px 12px;
+  background: #eef4f1;
+  color: var(--ink);
+  font-family: -apple-system, "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
+  line-height: 1.7;
+}
+.app-shell { width: 100%; max-width: 420px; }
+.phone {
+  background: #fff;
+  border-radius: 30px;
+  box-shadow: 0 13px 30px #183a4220;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 640px;
+}
+.device-status { display: flex; justify-content: space-between; padding: 10px 20px 2px; font-size: 13px; color: var(--muted); }
+.phone-content { flex: 1; padding: 16px 20px 22px; overflow-y: auto; }
+.card { padding: 20px 18px; }
+.card.center { text-align: center; }
+h2 { font-size: 25px; margin: 8px 0; }
+.lesson-top { display: flex; align-items: center; gap: 10px; padding: 10px 16px 0; }
+.lesson-top > span { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.progress-track { flex: 1; height: 12px; border-radius: 999px; background: #e3eeec; overflow: hidden; }
+.progress-track > i { display: block; height: 100%; border-radius: inherit; background: var(--teal); transition: width .2s; }
+.type-tag { font-size: 12px; font-weight: 700; color: var(--teal); text-transform: lowercase; }
+.prompt { font-size: 18px; margin: 6px 0 14px; }
+.prompt .plain-prompt { margin: 0; }
+.q-figure { margin: 0 0 14px; text-align: center; }
+.q-figure img { max-width: 100%; max-height: 240px; }
+.choices { display: grid; gap: 10px; }
+.choice, .setup-options button {
+  min-height: 54px; padding: 12px 16px; border: 2px solid #bed4d7; border-radius: 14px;
+  background: #fff; color: var(--ink); font: inherit; font-size: 17px; cursor: pointer; text-align: left;
+}
+.choice:hover, .match-left:hover, .match-right:hover { border-color: var(--teal); }
+.choice.selected { border-color: var(--teal); background: #e4f3ee; font-weight: 700; }
+.choice[disabled] { cursor: default; opacity: .85; }
+.fill-blank input { width: 100%; min-height: 54px; padding: 12px 16px; font: inherit; font-size: 18px; border: 2px solid #bed4d7; border-radius: 14px; }
+.matching { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
+.match-col { display: grid; gap: 10px; align-content: start; }
+.match-left, .match-right { min-height: 50px; padding: 10px 12px; border: 2px solid #bed4d7; border-radius: 12px; background: #fff; font: inherit; font-size: 16px; cursor: pointer; color: var(--ink); }
+.match-left.selected { border-color: var(--teal); background: #e4f3ee; }
+.match-left.assigned { border-color: var(--ok); background: #eaf5ee; }
+.match-left small { display: block; color: var(--ok); font-size: 12px; }
+.match-right.used { opacity: .5; }
+.lesson-bottom { padding: 12px 16px 16px; border-top: 1px solid #eef4f1; background: #fff; }
+.app-button { width: 100%; min-height: 54px; border: 0; border-radius: 16px; background: var(--teal); color: #fff; font: inherit; font-size: 18px; font-weight: 750; cursor: pointer; }
+.app-button:hover { background: var(--teal-dark); }
+.app-button[disabled] { background: #b8ccd0; cursor: default; }
+.text-button { border: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; cursor: pointer; padding: 8px; }
+.feedback { animation: fade .15s ease-in; }
+.feedback.ok strong { color: var(--ok); }
+.feedback.wrong strong { color: var(--warn); }
+.feedback .app-button { margin-top: 10px; }
+.result-symbol { width: 72px; height: 72px; margin: 8px auto; display: grid; place-items: center; border-radius: 50%; background: var(--teal); color: #fff; font-size: 40px; }
+.small-note { color: var(--muted); font-size: 14px; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* Native MathML sizing */
+math { font-size: 1.15em; }
+mfrac { vertical-align: middle; }
