@@ -21,9 +21,16 @@ export function optionHtml(activity, index) {
 }
 
 export function figureHtml(activity) {
-  const src = activity.figureUrl || activity.imageUrl;
-  if (!src) return '';
-  return `<figure class="q-figure"><img src="${escapeHtml(src)}" alt="題目附圖" loading="lazy"></figure>`;
+  const html = activity.promptHtml || '';
+  // 圖已內嵌在題幹 → 不再另外貼圖（避免重複）。
+  if (html.includes('<img')) return '';
+  // 有獨立重繪圖（figureUrl）才顯示。
+  if (activity.figureUrl) return `<figure class="q-figure"><img src="${escapeHtml(activity.figureUrl)}" alt="題目附圖" loading="lazy"></figure>`;
+  // 只有在完全沒有題幹 HTML（未 enrich 的舊資料）時，才退回整題原圖。
+  if (!activity.promptHtml && activity.imageUrl) {
+    return `<figure class="q-figure"><img src="${escapeHtml(activity.imageUrl)}" alt="題目原圖" loading="lazy"></figure>`;
+  }
+  return '';
 }
 
 export function choiceHtml(activity) {

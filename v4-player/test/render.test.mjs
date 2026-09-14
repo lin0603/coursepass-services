@@ -23,6 +23,20 @@ test('figureHtml renders svg figureUrl', () => {
   assert.equal(figureHtml({}), '');
 });
 
+test('figureHtml skips a separate figure when promptHtml already embeds one', () => {
+  const html = figureHtml({ promptHtml: '題幹<img class="q-fig" src="https://x/fig.svg">', figureUrl: 'https://x/fig.svg', imageUrl: 'https://x/q.png' });
+  assert.equal(html, '');
+});
+
+test('figureHtml does not show the whole-question image when promptHtml exists', () => {
+  assert.equal(figureHtml({ promptHtml: '純文字題', imageUrl: 'https://x/q.png' }), '');
+});
+
+test('figureHtml falls back to imageUrl only without promptHtml (legacy)', () => {
+  const html = figureHtml({ promptHtml: null, imageUrl: 'https://x/q.png' });
+  assert.match(html, /題目原圖/);
+});
+
 test('choiceHtml emits one button per option with indices', () => {
   const html = choiceHtml({ options: ['a', 'b', 'c'], optionsHtml: null });
   assert.equal((html.match(/data-choice=/g) || []).length, 3);
