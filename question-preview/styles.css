@@ -40,14 +40,15 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .more button { background: #1e2430; color: #e6e9ef; border: 1px solid #2a3140; border-radius: 8px; padding: 8px 16px; cursor: pointer; }
 
 /* App 呈現（companion-api 活動格式） */
-.app-view { margin-top: 12px; border: 1px solid #cfe0dd; border-radius: 12px; background: #f5fbfa; padding: 10px 12px; }
+.app-view { margin-top: 12px; border: 1px solid #cfe0dd; border-radius: 12px; background: #f5fbfa; padding: 10px 12px; color: #111827; }
 .app-head { font-weight: 800; color: #087e8b; margin-bottom: 6px; }
 .app-label { font-weight: 600; color: #536c72; font-size: 13px; margin-left: 6px; }
 .app-opts { display: grid; gap: 6px; }
-.app-opt { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #fff; border: 1px solid #e2ebe7; border-radius: 8px; }
-.app-opt.correct { border-color: #236251; background: #eaf5ee; font-weight: 700; }
-.app-opt b { color: #536c72; }
-.app-correct { color: #236251; font-weight: 700; margin: 6px 0 0; }
+.app-opt { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #fff; border: 1px solid #e2ebe7; border-radius: 8px; color: #111827; }
+.app-opt.correct { border-color: #087e8b; background: #eaf5ee; font-weight: 700; color: #087e8b; }
+.app-opt b { color: #6b7280; }
+.app-opt.correct b { color: #087e8b; }
+.app-correct { color: #087e8b; font-weight: 700; margin: 6px 0 0; }
 .app-none { color: #a6403b; margin: 0; }
 .app-fig img { max-width: 200px; border: 1px solid #e2ebe7; border-radius: 8px; margin-top: 8px; }
 /* 審查 */
