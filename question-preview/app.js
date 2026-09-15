@@ -33,25 +33,29 @@ function optionsOf(it) {
 }
 function reviewOf(id) { return state.reviews[id] || { status: '', note: '' }; }
 
-// App 實際呈現（來自 companion-api 活動格式）
+// App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
 function appViewHtml(it) {
   const a = state.appdata[it.id];
-  if (!a) return `<section class="app-view"><div class="app-head">App 呈現</div><p class="app-none">未進入 App（不在活動集）</p></section>`;
+  const prompt = it.promptHtml || `<p>${esc(it.prompt)}</p>`;
+  if (!a) {
+    return `<section class="app-view"><div class="app-head">App 呈現</div>
+      <div class="app-phone"><div class="app-prompt">${prompt}</div><p class="app-none">未進入 App（不在活動集）</p></div></section>`;
+  }
   const label = a.mode === 'choice' ? `點選題 · ${a.options.length} 選項 · ${esc(a.generator || '')}` : `直映 · ${esc(a.type)} · ${esc(a.generator || 'direct')}`;
   let body = '';
-  if (a.mode === 'choice') {
-    const opts = (a.options || []).map((_, i) => `<div class="app-opt ${i === a.correctIndex ? 'correct' : ''}"><b>${LETTERS[i]}</b>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</div>`).join('');
-    body = `<div class="app-opts">${opts}</div><p class="app-correct">正解：${a.correctHtml || esc(a.correctValue)}</p>`;
-  } else if (a.type === 'choice') {
-    const opts = (a.options || []).map((_, i) => `<div class="app-opt ${i === a.correctIndex ? 'correct' : ''}"><b>${LETTERS[i]}</b>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</div>`).join('');
+  if (a.mode === 'choice' || a.type === 'choice') {
+    const opts = (a.options || []).map((_, i) => `<button type="button" class="app-btn ${i === a.correctIndex ? 'correct' : ''}" disabled><b>${LETTERS[i]}</b><span>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</span></button>`).join('');
     body = `<div class="app-opts">${opts}</div>`;
+  } else if (a.type === 'matching' && a.pairs) {
+    body = `<div class="app-match"><div>${a.pairs.map((p) => `<button type="button" class="app-btn" disabled>${esc(p.left)}</button>`).join('')}</div><div>${a.pairs.map((p) => `<button type="button" class="app-btn" disabled>${esc(p.right)}</button>`).join('')}</div></div>`;
   } else if (a.accept && a.accept.length) {
-    body = `<p class="app-correct">填空 ${a.blanks} 格 · 接受：${esc(a.accept.join('、'))}</p>`;
+    body = `<div class="app-fill">${a.accept.map(() => '<span class="app-input"></span>').join('')}</div><p class="app-correct">接受：${esc(a.accept.join('、'))}</p>`;
   } else {
     body = `<p class="app-correct">答案：${esc(String(a.answer ?? ''))}</p>`;
   }
-  const fig = a.figureUrl ? `<a class="app-fig" href="${esc(a.figureUrl)}" target="_blank"><img loading="lazy" src="${esc(a.figureUrl)}" alt="題圖"></a>` : '';
-  return `<section class="app-view"><div class="app-head">App 呈現 <span class="app-label">${label}</span></div>${body}${fig}</section>`;
+  const fig = a.figureUrl ? `<div class="app-fig"><img loading="lazy" src="${esc(a.figureUrl)}" alt="題圖"></div>` : '';
+  return `<section class="app-view"><div class="app-head">App 呈現 <span class="app-label">${label}</span></div>
+    <div class="app-phone"><div class="app-prompt">${prompt}</div>${fig}${body}</div></section>`;
 }
 
 function reviewHtml(it) {
@@ -103,13 +107,19 @@ function render() {
         <span class="badge rv rv-${esc(rev.status || 'none')}">${REVIEW_LABELS[rev.status || '']}</span>
       </div>
       ${it.chapter ? `<div class="lesson">${esc(it.chapter)}</div>` : (it.lesson ? `<div class="lesson">${esc(it.lesson)}</div>` : '')}
-      <div class="prompt">${it.promptHtml || esc(it.prompt)}</div>
-      <div class="body">
-        <div class="opts">${rows || `<div class="ans">答案：${it.answerHtml || esc(deFull(it.answer))}</div>`}</div>
-        ${it.imageUrl ? `<a class="fig" href="${it.imageUrl}" target="_blank"><img loading="lazy" src="${it.imageUrl}" alt="題目原圖"></a>` : '<div class="noimg">無圖</div>'}
-      </div>
-      ${appViewHtml(it)}
-      ${reviewHtml(it)}`;
+      <div class="card-cols">
+        <div class="col-left">
+          <div class="prompt">${it.promptHtml || esc(it.prompt)}</div>
+          <div class="body">
+            <div class="opts">${rows || `<div class="ans">答案：${it.answerHtml || esc(deFull(it.answer))}</div>`}</div>
+            ${it.imageUrl ? `<a class="fig" href="${it.imageUrl}" target="_blank"><img loading="lazy" src="${it.imageUrl}" alt="題目原圖"></a>` : '<div class="noimg">無圖</div>'}
+          </div>
+        </div>
+        <div class="col-right">
+          ${appViewHtml(it)}
+          ${reviewHtml(it)}
+        </div>
+      </div>`;
     frag.appendChild(card);
   }
   el.list.appendChild(frag);
