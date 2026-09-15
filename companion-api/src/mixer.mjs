@@ -33,10 +33,10 @@ function variantToActivity(base, v) {
 }
 
 // 每題產生一個候選活動：數學短答優先轉 choice 變體，其餘用直映。
-export function collectCandidates(questions) {
+export function collectCandidates(questions, options = {}) {
   const out = [];
   for (const q of questions || []) {
-    const base = assemble([q])[0];
+    const base = assemble([q], options)[0];
     if (base.variants && base.variants.choice) {
       out.push(variantToActivity(base, base.variants.choice));
     } else if (base.playable) {
@@ -46,8 +46,8 @@ export function collectCandidates(questions) {
   return out;
 }
 
-export function buildActivitySet(questions, { count = 10, pairCount = 4 } = {}) {
-  const candidates = collectCandidates(questions);
+export function buildActivitySet(questions, { count = 10, pairCount = 4, llmMap } = {}) {
+  const candidates = collectCandidates(questions, { llmMap });
 
   const nodeId = questions?.[0]?.primaryKnowledgeNodeId || null;
   const matching = buildMatching(questions, { pairCount });

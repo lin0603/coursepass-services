@@ -100,8 +100,7 @@ test('fill_blank keeps answer and has null contract fields', () => {
   assert.equal(a.playable, true);
 });
 
-test('choice without resolvable correct answer is not playable', () => {
-  const a = toActivity({
+test('choice without resolvable correct answer is not playable', () => {  const a = toActivity({
     ...base,
     questionType: 'multiple_choice',
     options: ['x', 'y'],
@@ -120,6 +119,16 @@ test('fill_blank splits multi-value answers and strips note', () => {
   const noteOnly = toActivity({ ...base, questionType: 'fill_blank', options: [], answer: '(本題答案僅供參考)' });
   assert.equal(noteOnly.blanks, 0);
   assert.equal(noteOnly.playable, false);
+});
+
+test('toActivity uses llmMap fallback for unconvertible answers', () => {
+  const a = toActivity(
+    { ...base, questionType: 'fill_blank', options: [], answer: '德倫' },
+    { llmMap: { Q1: ['小明', '阿華', '小美', '大雄'] } },
+  );
+  assert.ok(a.variants && a.variants.choice);
+  assert.equal(a.variants.choice.options.length, 5);
+  assert.equal(a.variants.choice.generator, 'llm-distractor');
 });
 
 test('matching/word_order placeholders are emitted as nulls (Phase C/D)', () => {

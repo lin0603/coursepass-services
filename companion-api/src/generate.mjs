@@ -350,6 +350,26 @@ export function toChoiceVariant(question, { count = 4 } = {}) {
   return null;
 }
 
+// LLM（Gemini）誘答：由離線產生的 4 個誘答組成 5 選項點選題。
+export function toLlmChoiceVariant(answer, distractors, { generatorVersion = 'llm' } = {}) {
+  const correct = stripNote(answer);
+  if (!correct) return null;
+  const ds = (Array.isArray(distractors) ? distractors : [])
+    .map((d) => String(d ?? '').trim())
+    .filter((d) => d && d !== correct);
+  const uniq = [...new Set(ds)];
+  if (uniq.length < 4) return null;
+  const opts = [
+    { label: correct, html: escapeHtml(correct), isCorrect: true },
+    ...uniq.slice(0, 4).map((s) => ({ label: s, html: escapeHtml(s), isCorrect: false })),
+  ];
+  const result = choiceResult(shuffle(opts), {});
+  result.generator = 'llm-distractor';
+  result.generatorVersion = generatorVersion;
+  result.confidence = 0.6;
+  return result;
+}
+
 // 真分數的等值分數配對（數學：擴分/約分表徵轉換）。
 // 取同一節點內相異的「真分數」答案，各自配一個擴分後的分數；值互異 → 唯一配對。
 export function buildMatching(questions, { pairCount = 4 } = {}) {

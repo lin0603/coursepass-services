@@ -1,6 +1,6 @@
 // Map a bound question to a companion activity contract.
 import { config } from './config.mjs';
-import { escapeHtml, htmlForValue, parseAnswer, splitValues, stripNote, toChoiceVariant } from './generate.mjs';
+import { escapeHtml, htmlForValue, parseAnswer, splitValues, stripNote, toChoiceVariant, toLlmChoiceVariant } from './generate.mjs';
 
 function fileUrl(rel) {
   if (!rel) return null;
@@ -56,7 +56,7 @@ export function resolveCorrectIndex(options, rawOptions, answer) {
   return i >= 0 ? i : null;
 }
 
-export function toActivity(question) {
+export function toActivity(question, { llmMap } = {}) {
   const rawType = String(question.questionType || '').trim();
   let type = activityType(rawType);
   const rawOptions = Array.isArray(question.options) ? question.options : [];
@@ -99,7 +99,10 @@ export function toActivity(question) {
     : null;
 
   // 由短答/填空生成 choice 變體（規則誘答；教育正確顯示）。
-  const choiceVariant = toChoiceVariant(question);
+  let choiceVariant = toChoiceVariant(question);
+  if (!choiceVariant && llmMap && Array.isArray(llmMap[question.sourceQuestionId])) {
+    choiceVariant = toLlmChoiceVariant(question.answer, llmMap[question.sourceQuestionId], { generatorVersion: 'gemini-2.5-flash' });
+  }
 
   return {
     activityId: `q:${question.sourceQuestionId}`,
@@ -140,6 +143,6 @@ export function toActivity(question) {
   };
 }
 
-export function assemble(questions) {
-  return questions.map(toActivity);
+export function assemble(questions, options = {}) {
+  return questions.map((q) => toActivity(q, options));
 }

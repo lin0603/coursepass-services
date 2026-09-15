@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-gen-'));
 const {
-  parseAnswer, buildDistractors, toChoiceVariant, mathmlFraction, formatValue, htmlForValue, stripNote, splitValues,
+  parseAnswer, buildDistractors, toChoiceVariant, mathmlFraction, formatValue, htmlForValue, stripNote, splitValues, toLlmChoiceVariant,
 } = await import('../src/generate.mjs');
 
 test('parseAnswer: fraction, mixed, integer, decimal with unit', () => {
@@ -72,6 +72,19 @@ test('toChoiceVariant: alternative-note fraction becomes numeric choice', () => 
 
 test('toChoiceVariant: pure name answers stay unconverted', () => {
   assert.equal(toChoiceVariant({ questionType: 'fill_blank', answer: '德倫' }), null);
+});
+
+test('toLlmChoiceVariant builds a 5-option choice from LLM distractors', () => {
+  const v = toLlmChoiceVariant('德倫', ['小明', '阿華', '小美', '大雄']);
+  assert.equal(v.type, 'choice');
+  assert.equal(v.options.length, 5);
+  assert.equal(v.options[v.correctIndex], '德倫');
+  assert.equal(v.generator, 'llm-distractor');
+});
+
+test('toLlmChoiceVariant rejects insufficient/duplicate/equal distractors', () => {
+  assert.equal(toLlmChoiceVariant('德倫', ['小明', '小明', '小美', '德倫']), null);
+  assert.equal(toLlmChoiceVariant('德倫', ['a', 'b', 'c']), null);
 });
 
 test('mathmlFraction / htmlForValue render stacked fractions', () => {
