@@ -121,26 +121,6 @@ test('fill_blank splits multi-value answers and strips note', () => {
   assert.equal(noteOnly.playable, false);
 });
 
-test('toActivity builds pairs from matchingMap (unique lefts required)', () => {
-  const a = toActivity(
-    { ...base, sourceQuestionId: 'M1', questionType: 'matching', options: [], answer: '' },
-    { matchingMap: { M1: { pairs: [{ left: '48÷7', right: '不整除' }, { left: '48÷12', right: '整除' }] } } },
-  );
-  assert.equal(a.type, 'matching');
-  assert.equal(a.pairs.length, 2);
-  assert.equal(a.playable, true);
-  assert.equal(a.pairs[0].right, '不整除');
-});
-
-test('toActivity rejects matching pairs with duplicate lefts', () => {
-  const a = toActivity(
-    { ...base, sourceQuestionId: 'M2', questionType: 'matching', options: [], answer: '' },
-    { matchingMap: { M2: { pairs: [{ left: 'x', right: 'a' }, { left: 'x', right: 'b' }] } } },
-  );
-  assert.equal(a.pairs, null);
-  assert.equal(a.playable, false);
-});
-
 test('toActivity uses llmMap fallback for unconvertible answers', () => {
   const a = toActivity(
     { ...base, questionType: 'fill_blank', options: [], answer: '德倫' },

@@ -82,3 +82,12 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .fig-block { margin-top: 14px; }
 .fig-block .fig-cap { font-size: 12px; color: #8b93a5; margin-bottom: 4px; }
 .fig-block .fig img { max-width: 100%; border: 1px solid #2a3140; border-radius: 8px; background: #fff; }
+
+/* 連連看：裁切原圖元件、依原位置排列；同色＝同一配對 */
+.app-match { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.app-match > div { display: grid; gap: 8px; align-content: start; }
+.app-crop { width: 100%; background-repeat: no-repeat; background-color: #fff; border: 2px solid #cdd9d6; border-radius: 8px; }
+.app-crop.pair-0 { border-color: #e05252; } .app-crop.pair-1 { border-color: #e0a03a; }
+.app-crop.pair-2 { border-color: #3fae5a; } .app-crop.pair-3 { border-color: #3f8cff; }
+.app-crop.pair-4 { border-color: #9c6ade; } .app-crop.pair-5 { border-color: #d05aa3; }
+.app-crop.pair-6 { border-color: #17a2a2; } .app-crop.pair-7 { border-color: #8a6d3b; }

@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, reviews: {}, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, reviews: {}, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   search: document.getElementById('search'),
@@ -33,6 +33,35 @@ function optionsOf(it) {
 }
 function reviewOf(id) { return state.reviews[id] || { status: '', note: '' }; }
 
+// 以 CSS 從原圖裁切出元件（box = [ymin,xmin,ymax,xmax], 0–1000）
+function cropStyle(img, box) {
+  const [y1, x1, y2, x2] = box;
+  const W = Math.max(1, x2 - x1);
+  const H = Math.max(1, y2 - y1);
+  const sizeW = (1000 / W) * 100;
+  const sizeH = (1000 / H) * 100;
+  const posX = (1000 - W) > 0 ? (x1 / (1000 - W)) * 100 : 0;
+  const posY = (1000 - H) > 0 ? (y1 / (1000 - H)) * 100 : 0;
+  return `background-image:url('${img}');background-size:${sizeW}% ${sizeH}%;background-position:${posX}% ${posY}%;aspect-ratio:${W} / ${H};`;
+}
+
+// 連連看：裁切出左右元件，依原位置排列；同色＝同一配對（依答案）。
+function matchingView(it) {
+  const m = state.matching[it.id];
+  if (!m || !m.image || !Array.isArray(m.left) || !Array.isArray(m.right)) {
+    return '<p class="app-none">連連看：尚無座標資料（請用下方審查標註或重跑抽取）。</p>';
+  }
+  const group = {};
+  (m.pairs || []).forEach((p, gi) => { group['L' + p.left] = gi; group['R' + p.right] = gi; });
+  const col = (side) => m[side].map((b, i) => {
+    const g = group[(side === 'left' ? 'L' : 'R') + i];
+    const cls = g === undefined ? '' : `pair-${g % 8}`;
+    return `<div class="app-crop ${cls}" style="${cropStyle(m.image, b.box_2d)}" title="${esc(b.label || '')}"></div>`;
+  }).join('');
+  return `<div class="app-match"><div>${col('left')}</div><div>${col('right')}</div></div>
+    <p class="app-correct">依答案標色：同色為一組配對（未標色＝未判定）。</p>`;
+}
+
 // App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
 function appViewHtml(it) {
   const a = state.appdata[it.id];
@@ -47,13 +76,7 @@ function appViewHtml(it) {
     const opts = (a.options || []).map((_, i) => `<button type="button" class="app-btn ${i === a.correctIndex ? 'correct' : ''}" disabled><b>${LETTERS[i]}</b><span>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</span></button>`).join('');
     body = `<div class="app-opts">${opts}</div>`;
   } else if (a.type === 'matching') {
-    if (a.pairs && a.pairs.length) {
-      const col = (side) => a.pairs.map((p, i) => `<button type="button" class="app-btn correct" disabled><b>${i + 1}</b><span>${p[side + 'Html'] || esc(p[side])}</span></button>`).join('');
-      body = `<div class="app-match"><div>${col('left')}</div><div>${col('right')}</div></div>
-        <p class="app-correct">正解配對（左右同號為一對）：${a.pairs.map((_, i) => i + 1).join('、')}</p>`;
-    } else {
-      body = '<p class="app-none">連連看：無結構化項目，無法自動判定（請用下方審查標註或改題）。</p>';
-    }
+    body = matchingView(it);
   } else if (a.accept && a.accept.length) {
     body = `<div class="app-fill">${a.accept.map(() => '<span class="app-input"></span>').join('')}</div><p class="app-correct">接受：${esc(a.accept.join('、'))}</p>`;
   } else {
@@ -192,20 +215,24 @@ el.list.addEventListener('click', async (event) => {
 const params = new URLSearchParams(location.search);
 const metaData = document.querySelector('meta[name="preview-data"]');
 const metaApp = document.querySelector('meta[name="preview-appdata"]');
+const metaMatch = document.querySelector('meta[name="preview-matching"]');
 const metaApi = document.querySelector('meta[name="reviews-api"]');
 const metaToken = document.querySelector('meta[name="reviews-token"]');
 const DATA_URL = params.get('data') || (metaData && metaData.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5.json';
 const APP_DATA_URL = params.get('appdata') || (metaApp && metaApp.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5-appdata.json';
+const MATCHING_URL = params.get('matching') || (metaMatch && metaMatch.content) || 'https://resource-files-dev.starxinteractive.com/preview/matching-pairs.json';
 const REVIEWS_API = params.get('api') || (metaApi && metaApi.content) || 'https://companion-api-dev.starxinteractive.com';
 const REVIEWS_TOKEN = params.get('token') || (metaToken && metaToken.content) || 'cp-dev-token-change-me';
 
 Promise.all([
   fetch(DATA_URL).then((r) => r.json()),
   fetch(APP_DATA_URL).then((r) => r.json()).catch(() => ({ items: {} })),
+  fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
   fetch(`${REVIEWS_API}/v1/reviews`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
-]).then(([d, app, rev]) => {
+]).then(([d, app, match, rev]) => {
   state.items = d.items;
   state.appdata = app.items || {};
+  state.matching = match.items || {};
   for (const r of (rev.items || [])) state.reviews[r.sourceQuestionId] = r;
   const units = [...new Set(state.items.map((i) => i.unit).filter(Boolean))];
   const unitNo = (u) => Math.min(...state.items.filter((i) => i.unit === u).map((i) => parseInt(i.section, 10) || 99));
