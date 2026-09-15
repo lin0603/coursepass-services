@@ -38,3 +38,28 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .noimg { color: #8b93a5; font-size: 12px; }
 .more { text-align: center; padding-bottom: 60px; }
 .more button { background: #1e2430; color: #e6e9ef; border: 1px solid #2a3140; border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+
+/* App 呈現（companion-api 活動格式） */
+.app-view { margin-top: 12px; border: 1px solid #cfe0dd; border-radius: 12px; background: #f5fbfa; padding: 10px 12px; }
+.app-head { font-weight: 800; color: #087e8b; margin-bottom: 6px; }
+.app-label { font-weight: 600; color: #536c72; font-size: 13px; margin-left: 6px; }
+.app-opts { display: grid; gap: 6px; }
+.app-opt { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #fff; border: 1px solid #e2ebe7; border-radius: 8px; }
+.app-opt.correct { border-color: #236251; background: #eaf5ee; font-weight: 700; }
+.app-opt b { color: #536c72; }
+.app-correct { color: #236251; font-weight: 700; margin: 6px 0 0; }
+.app-none { color: #a6403b; margin: 0; }
+.app-fig img { max-width: 200px; border: 1px solid #e2ebe7; border-radius: 8px; margin-top: 8px; }
+/* 審查 */
+.review { margin-top: 10px; border-top: 1px dashed #dbe5e2; padding-top: 8px; }
+.rv-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rv-row label { font-weight: 700; color: #42606a; font-size: 13px; }
+.rv-status { min-height: 32px; border: 1px solid #bed4d7; border-radius: 8px; padding: 2px 8px; font: inherit; }
+.rv-save { min-height: 32px; padding: 2px 14px; border: 0; border-radius: 8px; background: #087e8b; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.rv-save[disabled] { background: #b8ccd0; }
+.rv-state { font-size: 13px; color: #236251; }
+.rv-note { width: 100%; margin-top: 8px; border: 1px solid #bed4d7; border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+.badge.rv { background: #eef4f1; color: #42606a; }
+.badge.rv-approved { background: #eaf5ee; color: #236251; }
+.badge.rv-adjust { background: #fdf1e0; color: #8a5a12; }
+.badge.rv-rejected { background: #fbeceb; color: #a6403b; }

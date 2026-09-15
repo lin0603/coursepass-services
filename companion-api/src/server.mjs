@@ -155,6 +155,26 @@ app.post('/v1/learners/:learnerId/answers', asyncHandler(async (req, res) => {
   res.json(store.recordAnswer({ learnerId: req.params.learnerId, ...parsed.data }));
 }));
 
+// --- Question review / comments (persisted) ---
+const reviewSchema = z.object({
+  status: z.enum(['pending', 'approved', 'adjust', 'rejected']).optional(),
+  note: z.string().max(2000).optional(),
+  nodeId: z.string().max(64).optional(),
+  reviewer: z.string().max(80).optional(),
+});
+
+app.get('/v1/reviews', (req, res) => res.json({ items: store.listReviews({ node: req.query.node, status: req.query.status }) }));
+app.get('/v1/reviews/:id', (req, res) => {
+  const review = store.getReview(req.params.id);
+  if (!review) return res.status(404).json({ error: 'not found' });
+  res.json(review);
+});
+app.put('/v1/reviews/:id', (req, res) => {
+  const parsed = reviewSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  res.json(store.upsertReview({ sourceQuestionId: req.params.id, ...parsed.data }));
+});
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(502).json({ error: 'upstream/service error', message: String(err.message || err) });

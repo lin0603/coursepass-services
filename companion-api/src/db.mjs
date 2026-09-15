@@ -17,8 +17,12 @@ CREATE TABLE IF NOT EXISTS wrongbook (
   learnerId TEXT, sourceQuestionId TEXT, nodeId TEXT, wrongCount INTEGER DEFAULT 0,
   lastWrongAt TEXT, PRIMARY KEY (learnerId, sourceQuestionId)
 );
+CREATE TABLE IF NOT EXISTS reviews (
+  sourceQuestionId TEXT PRIMARY KEY, nodeId TEXT, status TEXT, note TEXT, reviewer TEXT, updatedAt TEXT
+);
 CREATE INDEX IF NOT EXISTS ix_answers_learner ON answers(learnerId, createdAt);
 CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWrongAt);
+CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
 `);
 
 const now = () => new Date().toISOString();
@@ -57,5 +61,31 @@ export const store = {
   },
   getWrongbook(learnerId) {
     return db.prepare('SELECT sourceQuestionId, nodeId, wrongCount, lastWrongAt FROM wrongbook WHERE learnerId=? ORDER BY lastWrongAt DESC').all(learnerId);
+  },
+  getReview(sourceQuestionId) {
+    return db.prepare('SELECT sourceQuestionId, nodeId, status, note, reviewer, updatedAt FROM reviews WHERE sourceQuestionId=?').get(sourceQuestionId) || null;
+  },
+  listReviews({ node, status } = {}) {
+    const where = [];
+    const params = [];
+    if (node) { where.push('nodeId = ?'); params.push(node); }
+    if (status) { where.push('status = ?'); params.push(status); }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return db.prepare(`SELECT sourceQuestionId, nodeId, status, note, reviewer, updatedAt FROM reviews ${clause} ORDER BY updatedAt DESC`).all(...params);
+  },
+  upsertReview({ sourceQuestionId, nodeId, status, note, reviewer }) {
+    const existing = this.getReview(sourceQuestionId);
+    const row = {
+      sourceQuestionId,
+      nodeId: nodeId ?? (existing ? existing.nodeId : null),
+      status: status ?? (existing ? existing.status : 'pending'),
+      note: note ?? (existing ? existing.note : ''),
+      reviewer: reviewer ?? (existing ? existing.reviewer : null),
+      updatedAt: now(),
+    };
+    db.prepare(`INSERT INTO reviews (sourceQuestionId,nodeId,status,note,reviewer,updatedAt) VALUES (?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, reviewer=excluded.reviewer, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.nodeId, row.status, row.note, row.reviewer, row.updatedAt);
+    return row;
   },
 };
