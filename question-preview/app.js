@@ -46,8 +46,14 @@ function appViewHtml(it) {
   if (a.mode === 'choice' || a.type === 'choice') {
     const opts = (a.options || []).map((_, i) => `<button type="button" class="app-btn ${i === a.correctIndex ? 'correct' : ''}" disabled><b>${LETTERS[i]}</b><span>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</span></button>`).join('');
     body = `<div class="app-opts">${opts}</div>`;
-  } else if (a.type === 'matching' && a.pairs) {
-    body = `<div class="app-match"><div>${a.pairs.map((p) => `<button type="button" class="app-btn" disabled>${esc(p.left)}</button>`).join('')}</div><div>${a.pairs.map((p) => `<button type="button" class="app-btn" disabled>${esc(p.right)}</button>`).join('')}</div></div>`;
+  } else if (a.type === 'matching') {
+    if (a.pairs && a.pairs.length) {
+      const col = (side) => a.pairs.map((p, i) => `<button type="button" class="app-btn correct" disabled><b>${i + 1}</b><span>${p[side + 'Html'] || esc(p[side])}</span></button>`).join('');
+      body = `<div class="app-match"><div>${col('left')}</div><div>${col('right')}</div></div>
+        <p class="app-correct">正解配對（左右同號為一對）：${a.pairs.map((_, i) => i + 1).join('、')}</p>`;
+    } else {
+      body = '<p class="app-none">連連看：無結構化項目，無法自動判定（請用下方審查標註或改題）。</p>';
+    }
   } else if (a.accept && a.accept.length) {
     body = `<div class="app-fill">${a.accept.map(() => '<span class="app-input"></span>').join('')}</div><p class="app-correct">接受：${esc(a.accept.join('、'))}</p>`;
   } else {

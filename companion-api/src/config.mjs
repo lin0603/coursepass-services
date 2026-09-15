@@ -11,6 +11,7 @@ export const config = {
 
 // LLM 誘答變體（離線生成、放 resource-files）。
 config.llmVariantsUrl = process.env.LLM_VARIANTS_URL || `${config.filesBase}/preview/llm-variants.json`;
+config.matchingPairsUrl = process.env.MATCHING_PAIRS_URL || `${config.filesBase}/preview/matching-pairs.json`;
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 export const dbPath = path.join(config.dataDir, 'companion.sqlite');

@@ -8,6 +8,7 @@ import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
+import { getMatchingPairs } from './matchingPairs.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -44,7 +45,8 @@ app.get('/v1/units/:id/activities', asyncHandler(async (req, res) => {
   const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
   const data = await knowledge.questions(req.params.id, { limit, offset: Number(req.query.offset) || 0, reviewStatus, type: req.query.type });
   const items = data.items.map((q) => ({ ...q, primaryKnowledgeNodeId: q.primaryKnowledgeNodeId || req.params.id }));
-  res.json({ unitId: req.params.id, total: data.total, items: assemble(items, { llmMap: await getLlmVariants() }) });
+  const [llmMap, matchingMap] = await Promise.all([getLlmVariants(), getMatchingPairs()]);
+  res.json({ unitId: req.params.id, total: data.total, items: assemble(items, { llmMap, matchingMap }) });
 }));
 
 // --- Mixed activity set for a unit (Duolingo-style session, activity layer Phase E) ---
@@ -62,7 +64,8 @@ app.get('/v1/units/:id/activity-set', asyncHandler(async (req, res) => {
     if (!Array.isArray(chunk.items) || chunk.items.length < 200) break;
     offset += 200;
   }
-  res.json({ unitId: req.params.id, count, total, items: buildActivitySet(pool, { count, llmMap: await getLlmVariants() }) });
+  const [llmMap, matchingMap] = await Promise.all([getLlmVariants(), getMatchingPairs()]);
+  res.json({ unitId: req.params.id, count, total, items: buildActivitySet(pool, { count, llmMap, matchingMap }) });
 }));
 
 // --- Learning path for a unit's subject/grade, with learner status (Phase P1) ---
@@ -122,7 +125,8 @@ app.get('/v1/units/:id/placement', asyncHandler(async (req, res) => {
       if (items.length >= limit) break;
     }
   }
-  res.json({ unitId: req.params.id, subject: node.subject, grade: node.grade, items: assemble(items, { llmMap: await getLlmVariants() }) });
+  const [llmMap, matchingMap] = await Promise.all([getLlmVariants(), getMatchingPairs()]);
+  res.json({ unitId: req.params.id, subject: node.subject, grade: node.grade, items: assemble(items, { llmMap, matchingMap }) });
 }));
 
 // --- Learner state ---

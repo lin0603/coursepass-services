@@ -56,7 +56,7 @@ export function resolveCorrectIndex(options, rawOptions, answer) {
   return i >= 0 ? i : null;
 }
 
-export function toActivity(question, { llmMap } = {}) {
+export function toActivity(question, { llmMap, matchingMap } = {}) {
   const rawType = String(question.questionType || '').trim();
   let type = activityType(rawType);
   const rawOptions = Array.isArray(question.options) ? question.options : [];
@@ -85,10 +85,23 @@ export function toActivity(question, { llmMap } = {}) {
   // 填空：清註記、拆多值（多填空）。
   const accept = type === 'fill_blank' ? splitValues(answer) : [];
 
-  const playable =
-    Boolean(question.prompt) &&
-    ((type === 'choice' && options.length >= 2 && correctIndex !== null) ||
-      (type === 'fill_blank' && accept.length >= 1));
+  // 配對：優先題目自帶 pairs；否則用離線 vision 抽取的 pairs（左項需唯一）。
+  let pairs = null;
+  if (type === 'matching') {
+    const provided = Array.isArray(question.pairs) && question.pairs.length ? question.pairs : null;
+    const extracted = matchingMap && matchingMap[question.sourceQuestionId] ? matchingMap[question.sourceQuestionId].pairs : null;
+    const candidate = provided || extracted;
+    if (Array.isArray(candidate) && candidate.length >= 2) {
+      const lefts = new Set(candidate.map((p) => String(p.left)));
+      if (lefts.size === candidate.length) pairs = candidate.map((p) => ({ left: String(p.left), right: String(p.right) }));
+    }
+  }
+
+  const playable = Boolean(question.prompt && (
+    (type === 'choice' && options.length >= 2 && correctIndex !== null)
+    || (type === 'fill_blank' && accept.length >= 1)
+    || (type === 'matching' && pairs !== null && pairs.length >= 2)
+  ));
 
   // 數學選項以 MathML 呈現（分數堆疊），非數學則轉義純文字。
   const optionsHtml = type === 'choice'
@@ -123,7 +136,7 @@ export function toActivity(question, { llmMap } = {}) {
     answerHtml: question.answerHtml || null,
     placeholder: null,
     words: null,
-    pairs: null,
+    pairs,
     audioText: null,
     audioLocale: null,
     expectedText: null,
