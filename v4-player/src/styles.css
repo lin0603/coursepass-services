@@ -99,3 +99,15 @@ mfrac { vertical-align: middle; }
 .q-original { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 8px; }
 .q-original summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .q-original img { margin-top: 8px; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+
+/* 重點整理 / 學習報告：小按鈕與彈窗 */
+.notes-mini { flex: none; min-height: 34px; padding: 4px 12px; border: 1px solid #bed4d7; border-radius: 999px; background: #fff; color: var(--teal-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.notes-mini:hover { border-color: var(--teal); background: #eff8f8; }
+.map-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: #183a4266; }
+.modal-card { width: 100%; max-width: 420px; max-height: 88vh; overflow-y: auto; background: #fff; border-radius: 20px; padding: 20px; box-shadow: 0 18px 40px #183a4240; }
+.modal-title { margin: 0 0 4px; font-size: 22px; }
+.note-examples { margin: 6px 0 0; padding-left: 18px; }
+.note-examples li { margin: 4px 0; }
+.report-item { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.report-item small { display: block; color: var(--muted); font-size: 13px; font-weight: 700; margin-bottom: 4px; }

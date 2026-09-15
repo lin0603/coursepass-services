@@ -6,6 +6,7 @@ import { knowledge } from './knowledgeClient.mjs';
 import { assemble } from './activities.mjs';
 import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic } from './path.mjs';
+import { buildNotes, buildReport } from './report.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -74,6 +75,34 @@ app.get('/v1/units/:id/path', asyncHandler(async (req, res) => {
   const progressByNode = Object.fromEntries((progress.nodes || []).map((n) => [n.nodeId, n]));
   const result = groupByTopic(paths.groups || [], progressByNode);
   res.json({ unitId: req.params.id, subject: node.subject, grade: node.grade, ...result });
+}));
+
+// --- Lesson notes (重點整理) for a unit (Phase P2) ---
+app.get('/v1/units/:id/notes', asyncHandler(async (req, res) => {
+  const [info, questions] = await Promise.all([
+    knowledge.node(req.params.id),
+    knowledge.questions(req.params.id, { limit: 5, reviewStatus: 'approved' }),
+  ]);
+  const node = info && info.node ? info.node : { id: req.params.id };
+  res.json(buildNotes(node, questions.items || []));
+}));
+
+// --- Learner report (三問：學會什麼 / 哪裡需要幫忙 / 距離目標) (Phase P2) ---
+app.get('/v1/learners/:learnerId/report', asyncHandler(async (req, res) => {
+  const unit = req.query.unit || 'N-5-4';
+  const info = await knowledge.node(unit);
+  const node = info && info.node ? info.node : {};
+  const paths = await knowledge.paths({ subject: node.subject, grade: node.grade });
+  const nodes = (paths.groups || []).flatMap((g) => g.nodes || []);
+  const progress = store.getProgress(req.params.learnerId);
+  const wrongbook = store.getWrongbook(req.params.learnerId);
+  res.json({
+    learnerId: req.params.learnerId,
+    subject: node.subject,
+    grade: node.grade,
+    unit,
+    report: buildReport({ progressNodes: progress.nodes || [], wrongbook, nodes }),
+  });
 }));
 
 // --- Learner state ---

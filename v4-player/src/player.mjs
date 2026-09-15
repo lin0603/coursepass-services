@@ -2,6 +2,8 @@
 import { adaptSet, toAnswerRecord } from './adapter.mjs';
 import { gradeActivity } from './grade.mjs';
 import { activityCardHtml, escapeHtml } from './render.mjs';
+import { fetchNotes, notesHtml } from './notes.mjs';
+import { openModal } from './modal.mjs';
 
 function shuffle(items) {
   const out = [...items];
@@ -25,7 +27,8 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
     const pct = state.activities.length ? Math.round((state.index / state.activities.length) * 100) : 0;
     return `<div class="lesson-top"><button type="button" class="text-button" data-action="quit" aria-label="回到地圖">×</button>
       <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
-      <span>${state.index + 1}／${state.activities.length}</span></div>`;
+      <span>${state.index + 1}／${state.activities.length}</span>
+      <button type="button" class="notes-mini" data-action="notes" aria-label="重點整理">重點整理</button></div>`;
   };
 
   const feedbackHtml = (activity, correct) => {
@@ -80,6 +83,15 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
   const record = (activity, response, correct) => request(`/v1/learners/${encodeURIComponent(learner)}/answers`, {
     method: 'POST', body: JSON.stringify(toAnswerRecord(activity, response, correct)),
   }).catch(() => {});
+
+  const openNotes = async () => {
+    try {
+      const data = await fetchNotes(api, auth, unit);
+      openModal(notesHtml(data));
+    } catch (error) {
+      openModal(`<p class="small-note">無法載入重點整理：${escapeHtml(String(error.message || error))}</p>`);
+    }
+  };
 
   const checkAnswer = () => {
     const activity = state.activities[state.index];
@@ -144,6 +156,7 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
     switch (button.dataset.action) {
       case 'check': checkAnswer(); break;
       case 'next': next(); break;
+      case 'notes': openNotes(); break;
       case 'quit':
       case 'map': if (typeof onExit === 'function') onExit(); break;
     }
