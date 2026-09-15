@@ -42,6 +42,35 @@ test('parseAnswer ignores trailing note', () => {
   assert.equal(parseAnswer('4.0902(本題答案僅供參考)').kind, 'decimal');
 });
 
+test('stripNote also strips leading notes and (或...) alternatives', () => {
+  assert.equal(stripNote('(本題答案僅供參考)6/13，12/26'), '6/13，12/26');
+  assert.equal(stripNote('1 8/32(或40/32)公斤'), '1 8/32公斤');
+});
+
+test('toChoiceVariant: Chinese fraction answer via text approximation', () => {
+  const v = toChoiceVariant({ questionType: 'fill_blank', answer: '五分之四小時' });
+  assert.equal(v.type, 'choice');
+  assert.equal(v.options.length, 5);
+  assert.equal(v.options[v.correctIndex], '五分之四小時');
+  assert.ok(v.options.some((o) => o === '五分之三小時'));
+});
+
+test('toChoiceVariant: embedded-number text answer', () => {
+  const v = toChoiceVariant({ questionType: 'short_answer', answer: '加上9' });
+  assert.equal(v.options.length, 5);
+  assert.equal(v.options[v.correctIndex], '加上9');
+});
+
+test('toChoiceVariant: alternative-note fraction becomes numeric choice', () => {
+  const v = toChoiceVariant({ questionType: 'fill_blank', answer: '1 8/32(或40/32)公斤' });
+  assert.equal(v.options.length, 5);
+  assert.match(v.options[v.correctIndex], /1 8\/32/);
+});
+
+test('toChoiceVariant: pure name answers stay unconverted', () => {
+  assert.equal(toChoiceVariant({ questionType: 'fill_blank', answer: '德倫' }), null);
+});
+
 test('mathmlFraction / htmlForValue render stacked fractions', () => {
   assert.match(mathmlFraction(3, 10, 12), /<mn>3<\/mn><mfrac><mrow><mn>10<\/mn>/);
   assert.match(htmlForValue(parseAnswer('5/6')), /<mfrac><mrow><mn>5<\/mn><\/mrow><mrow><mn>6<\/mn>/);
@@ -91,9 +120,9 @@ test('toChoiceVariant: multi-value answer becomes 5-option set choice', () => {
   assert.match(v.optionsHtml[v.correctIndex], /<mfrac>/);
 });
 
-test('toChoiceVariant: null for multiple-choice and unparseable text', () => {
+test('toChoiceVariant: null for multiple-choice and unconvertible text', () => {
   assert.equal(toChoiceVariant({ questionType: 'multiple_choice', answer: '1' }), null);
-  assert.equal(toChoiceVariant({ questionType: 'short_answer', answer: '五分之四小時' }), null);
+  assert.equal(toChoiceVariant({ questionType: 'short_answer', answer: '不一樣多' }), null);
 });
 
 test('distractors are non-equivalent (value differs, not just notation)', () => {

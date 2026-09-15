@@ -16,9 +16,16 @@ export function mathmlFraction(whole, num, den) {
   return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">${head}<mfrac><mrow><mn>${num}</mn></mrow><mrow><mn>${den}</mn></mrow></mfrac></math>`;
 }
 
-// 去除結尾的參考註記，例如「(本題答案僅供參考)」。
+// 去除參考註記：任何位置的「(或…)」替代，與開頭／結尾的「(…參考/答案/註…)」。
 export function stripNote(text) {
-  return String(text ?? '').trim().replace(/\s*[（(][^）)]*[）)]\s*$/, '').trim();
+  let t = String(text ?? '').trim().replace(/[（(][^）)]*或[^）)]*[）)]/g, '');
+  const note = '[（(][^）)]*(?:參考|答案|註)[^）)]*[）)]';
+  let prev;
+  do {
+    prev = t;
+    t = t.replace(new RegExp(`^${note}\\s*`), '').replace(new RegExp(`\\s*${note}$`), '').trim();
+  } while (t !== prev);
+  return t.replace(/\s+/g, ' ').trim();
 }
 
 // 拆多值答案（以 、，,;； 分隔；不切分數的 /）。
@@ -215,8 +222,67 @@ function choiceResult(mixed, meta) {
   };
 }
 
+// --- 文字近似法：中文分數、內含數字、運算詞 ---
+const CN_DIGIT = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+const CN_ARR = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+function cnToNum(s) {
+  s = String(s);
+  let m;
+  if (s === '十') return 10;
+  if ((m = s.match(/^([一二三四五六七八九])十([一二三四五六七八九])$/))) return CN_DIGIT[m[1]] * 10 + CN_DIGIT[m[2]];
+  if ((m = s.match(/^([一二三四五六七八九])十$/))) return CN_DIGIT[m[1]] * 10;
+  if ((m = s.match(/^十([一二三四五六七八九])$/))) return 10 + CN_DIGIT[m[1]];
+  if (CN_DIGIT[s]) return CN_DIGIT[s];
+  return null;
+}
+
+function numToCn(n) {
+  if (!Number.isInteger(n) || n < 1 || n > 99) return null;
+  if (n < 10) return CN_ARR[n];
+  if (n === 10) return '十';
+  if (n < 20) return `十${CN_ARR[n - 10]}`;
+  const t = Math.floor(n / 10);
+  const o = n % 10;
+  return `${CN_ARR[t]}十${o ? CN_ARR[o] : ''}`;
+}
+
+function textCandidates(answer) {
+  const cands = [];
+  const cf = answer.match(/^([一二三四五六七八九十]+)分之([一二三四五六七八九十]+)(.*)$/);
+  if (cf) {
+    const den = cnToNum(cf[1]);
+    const num = cnToNum(cf[2]);
+    const rest = cf[3] || '';
+    if (den && num) {
+      const forms = [[num, den + 1], [num, den - 1], [num + 1, den], [num - 1, den], [den, num]];
+      for (const [n, d] of forms) {
+        if (n < 1 || d < 2) continue;
+        const cnN = numToCn(n);
+        const cnD = numToCn(d);
+        if (cnN && cnD) cands.push(`${cnD}分之${cnN}${rest}`);
+      }
+    }
+  }
+  for (const m of answer.matchAll(/\d+(?:\.\d+)?/g)) {
+    const v = Number(m[0]);
+    for (const nv of [v + 1, v - 1, v + 10, v * 2, v % 2 === 0 ? v / 2 : null]) {
+      if (nv == null || nv <= 0 || nv === v) continue;
+      cands.push(answer.replace(m[0], String(nv)));
+    }
+  }
+  for (const [word, alts] of [['加上', ['減掉', '乘上', '除以']], ['減掉', ['加上', '乘上', '除以']]]) {
+    if (answer.includes(word)) for (const alt of alts) cands.push(answer.replace(word, alt));
+  }
+  return [...new Set(cands)].filter((s) => s && s !== answer);
+}
+
+function buildTextDistractors(answer, count) {
+  return textCandidates(answer).slice(0, count);
+}
+
 // 由 fill_blank / short_answer 產生「點選題」變體（預設 5 選項＝正解＋4 誘答）。
-// 適用：關係符號、多值集合、單一數值/分數；其餘（無法解析）回傳 null（維持輸入題）。
+// 適用：關係符號、多值集合、單一數值/分數、文字近似（中文分數／內含數字）。
 export function toChoiceVariant(question, { count = 4 } = {}) {
   const type = String(question.questionType || '').trim();
   if (!['fill_blank', 'short_answer'].includes(type)) return null;
@@ -253,6 +319,18 @@ export function toChoiceVariant(question, { count = 4 } = {}) {
       const correct = { label: formatValue(parsed), html: htmlForValue(parsed), isCorrect: true };
       const opts = [correct, ...distractors.slice(0, count).map((d) => ({ label: formatValue(d), html: htmlForValue(d), isCorrect: false }))];
       return choiceResult(shuffle(opts), { unit: parsed.unit });
+    }
+  }
+
+  // 4) 文字近似法（中文分數、內含數字、運算詞）；跳過含 OMML 殘留者。
+  if (!/[　]|\(\(/.test(raw) && raw.length <= 26) {
+    const ds = buildTextDistractors(raw, count);
+    if (ds.length >= count) {
+      const opts = [
+        { label: raw, html: escapeHtml(raw), isCorrect: true },
+        ...ds.slice(0, count).map((s) => ({ label: s, html: escapeHtml(s), isCorrect: false })),
+      ];
+      return choiceResult(shuffle(opts), {});
     }
   }
   return null;
