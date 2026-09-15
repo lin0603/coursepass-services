@@ -34,7 +34,7 @@ function optionsOf(it) {
 function reviewOf(id) { return state.reviews[id] || { status: '', note: '' }; }
 
 // 以 CSS 從原圖裁切出元件（box = [ymin,xmin,ymax,xmax], 0–1000）
-function cropStyle(img, box) {
+function cropBg(img, box) {
   const [y1, x1, y2, x2] = box;
   const W = Math.max(1, x2 - x1);
   const H = Math.max(1, y2 - y1);
@@ -42,24 +42,28 @@ function cropStyle(img, box) {
   const sizeH = (1000 / H) * 100;
   const posX = (1000 - W) > 0 ? (x1 / (1000 - W)) * 100 : 0;
   const posY = (1000 - H) > 0 ? (y1 / (1000 - H)) * 100 : 0;
-  return `background-image:url('${img}');background-size:${sizeW}% ${sizeH}%;background-position:${posX}% ${posY}%;aspect-ratio:${W} / ${H};`;
+  return `background-image:url('${img}');background-size:${sizeW}% ${sizeH}%;background-position:${posX}% ${posY}%;`;
 }
 
-// 連連看：裁切出左右元件，依原位置排列；同色＝同一配對（依答案）。
+// 連連看：裁切各元件，依原圖座標（絕對定位）排列；同色＝同一配對（依答案）。
 function matchingView(it) {
   const m = state.matching[it.id];
-  if (!m || !m.image || !Array.isArray(m.left) || !Array.isArray(m.right)) {
+  if (!m || !m.image || !Array.isArray(m.boxes) || m.boxes.length < 2) {
     return '<p class="app-none">連連看：尚無座標資料（請用下方審查標註或重跑抽取）。</p>';
   }
+  const W = m.width || 1000;
+  const H = m.height || 1000;
   const group = {};
-  (m.pairs || []).forEach((p, gi) => { group['L' + p.left] = gi; group['R' + p.right] = gi; });
-  const col = (side) => m[side].map((b, i) => {
-    const g = group[(side === 'left' ? 'L' : 'R') + i];
+  (m.pairs || []).forEach((p, gi) => { group['a' + p.a] = gi; group['b' + p.b] = gi; });
+  const tiles = m.boxes.map((b, i) => {
+    const [y1, x1, y2, x2] = b.box;
+    const style = `left:${(x1 / 1000 * 100).toFixed(2)}%;top:${(y1 / 1000 * 100).toFixed(2)}%;width:${((x2 - x1) / 1000 * 100).toFixed(2)}%;height:${((y2 - y1) / 1000 * 100).toFixed(2)}%;${cropBg(m.image, b.box)}`;
+    const g = group['a' + i] !== undefined ? group['a' + i] : group['b' + i];
     const cls = g === undefined ? '' : `pair-${g % 8}`;
-    return `<div class="app-crop ${cls}" style="${cropStyle(m.image, b.box_2d)}" title="${esc(b.label || '')}"></div>`;
+    return `<div class="app-tile ${cls}" style="${style}" title="${esc(b.label || '')}"></div>`;
   }).join('');
-  return `<div class="app-match"><div>${col('left')}</div><div>${col('right')}</div></div>
-    <p class="app-correct">依答案標色：同色為一組配對（未標色＝未判定）。</p>`;
+  return `<div class="app-canvas" style="aspect-ratio:${W} / ${H}">${tiles}</div>
+    <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
 }
 
 // App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
