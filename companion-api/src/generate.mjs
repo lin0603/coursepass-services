@@ -163,30 +163,99 @@ function shuffle(items) {
   return out;
 }
 
-// 由 fill_blank / short_answer 產生 choice 變體（含 MathML 選項）；
-// 無法解析或干擾項不足者回傳 null。
-export function toChoiceVariant(question, { count = 3 } = {}) {
-  const type = String(question.questionType || '').trim();
-  if (!['fill_blank', 'short_answer'].includes(type)) return null;
-  const parsed = parseAnswer(question.answer);
-  if (!parsed) return null;
-  const distractors = buildDistractors(parsed, count);
-  if (distractors.length < count) return null;
-  const correct = { ...parsed, isCorrect: true };
-  const mixed = shuffle([correct, ...distractors.map((d) => ({ ...d, isCorrect: false }))]);
+// --- 關係符號（＝ ＞ ＜ ≥ ≤ ≠）---
+const RELOP_CANON = { '＝': '=', '=': '=', '＞': '>', '>': '>', '＜': '<', '<': '<', '≥': '≥', '≤': '≤', '≠': '≠' };
+const RELOP_DISPLAY = { '=': '＝', '>': '＞', '<': '＜', '≥': '≥', '≤': '≤', '≠': '≠' };
+const RELOP_POOL = ['=', '>', '<', '≥', '≤', '≠'];
+
+export function parseRelop(raw) {
+  const t = stripNote(raw).trim();
+  if (t.length !== 1) return null;
+  return RELOP_CANON[t] || null;
+}
+
+// 答案是否含需轉點選題的特殊符號。
+const SPECIAL_RE = /[＝=＞><＜≥≤≠√×÷±°∠，,、;；]/;
+export function hasSpecialSymbols(answer) {
+  return SPECIAL_RE.test(String(answer ?? ''));
+}
+
+// 多值集合的干擾項：針對某一格做數值擾動，確保整組不同。
+function setDistractors(values, correctKey, count) {
+  const parsedValues = values.map(parseAnswer);
+  if (parsedValues.some((p) => !p)) return [];
+  const out = [];
+  const seen = new Set([correctKey]);
+  for (let idx = 0; idx < values.length && out.length < count; idx++) {
+    for (const d of buildDistractors(parsedValues[idx], count)) {
+      const mutated = values.map((v, i) => (i === idx ? formatValue(d) : v));
+      const joined = mutated.join('、');
+      if (seen.has(joined)) continue;
+      seen.add(joined);
+      out.push({ joined, html: mutated.map((v) => htmlForValue(parseAnswer(v))).join('、') });
+      if (out.length >= count) break;
+    }
+  }
+  return out;
+}
+
+function choiceResult(mixed, meta) {
   const correctIndex = mixed.findIndex((o) => o.isCorrect);
   return {
     type: 'choice',
     generator: 'rule-distractor',
-    generatorVersion: '1.0.0',
+    generatorVersion: '1.2.0',
     confidence: 0.7,
-    unit: parsed.unit || null,
-    options: mixed.map((o) => formatValue(o)),
-    optionsHtml: mixed.map((o) => htmlForValue(o)),
+    unit: meta.unit || null,
+    options: mixed.map((o) => o.label),
+    optionsHtml: mixed.map((o) => o.html),
     correctIndex,
-    correctValue: formatValue(parsed),
-    correctHtml: htmlForValue(parsed),
+    correctValue: mixed[correctIndex].label,
+    correctHtml: mixed[correctIndex].html,
   };
+}
+
+// 由 fill_blank / short_answer 產生「點選題」變體（預設 5 選項＝正解＋4 誘答）。
+// 適用：關係符號、多值集合、單一數值/分數；其餘（無法解析）回傳 null（維持輸入題）。
+export function toChoiceVariant(question, { count = 4 } = {}) {
+  const type = String(question.questionType || '').trim();
+  if (!['fill_blank', 'short_answer'].includes(type)) return null;
+  const raw = stripNote(question.answer);
+  if (!raw) return null;
+
+  // 1) 關係符號（＝ ＞ ＜ …）
+  const relop = parseRelop(raw);
+  if (relop) {
+    const distract = RELOP_POOL.filter((s) => s !== relop).slice(0, count);
+    if (distract.length < count) return null;
+    const mixed = shuffle([relop, ...distract].map((s) => ({
+      label: RELOP_DISPLAY[s], html: escapeHtml(RELOP_DISPLAY[s]), isCorrect: s === relop,
+    })));
+    return choiceResult(mixed, {});
+  }
+
+  // 2) 多值集合（多填空）
+  const values = splitValues(raw);
+  if (values.length > 1) {
+    const correctKey = values.join('、');
+    const ds = setDistractors(values, correctKey, count);
+    if (ds.length < count) return null;
+    const correct = { label: correctKey, html: values.map((v) => htmlForValue(parseAnswer(v))).join('、'), isCorrect: true };
+    const opts = [correct, ...ds.slice(0, count).map((d) => ({ label: d.joined, html: d.html, isCorrect: false }))];
+    return choiceResult(shuffle(opts), {});
+  }
+
+  // 3) 單一數值 / 分數
+  const parsed = parseAnswer(raw);
+  if (parsed) {
+    const distractors = buildDistractors(parsed, count);
+    if (distractors.length >= count) {
+      const correct = { label: formatValue(parsed), html: htmlForValue(parsed), isCorrect: true };
+      const opts = [correct, ...distractors.slice(0, count).map((d) => ({ label: formatValue(d), html: htmlForValue(d), isCorrect: false }))];
+      return choiceResult(shuffle(opts), { unit: parsed.unit });
+    }
+  }
+  return null;
 }
 
 // 真分數的等值分數配對（數學：擴分/約分表徵轉換）。

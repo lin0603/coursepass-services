@@ -57,26 +57,42 @@ test('buildDistractors: 3 distinct plausible values, none equal to correct', () 
   for (const x of d) assert.ok(Math.abs(x.value - p.value) > 1e-9);
 });
 
-test('toChoiceVariant: fill_blank fraction becomes 4-option MathML choice', () => {
+test('toChoiceVariant: fill_blank fraction becomes 5-option MathML choice', () => {
   const v = toChoiceVariant({ questionType: 'fill_blank', answer: '6/11公升' });
   assert.equal(v.type, 'choice');
-  assert.equal(v.options.length, 4);
+  assert.equal(v.options.length, 5);
   assert.equal(v.options[v.correctIndex], '6/11');
   assert.match(v.optionsHtml[v.correctIndex], /<mfrac>/);
   assert.equal(v.generator, 'rule-distractor');
   assert.equal(v.unit, '公升');
 });
 
-test('toChoiceVariant: integer and decimal answers', () => {
+test('toChoiceVariant: integer and decimal answers get 5 options', () => {
   const i = toChoiceVariant({ questionType: 'short_answer', answer: '108' });
+  assert.equal(i.options.length, 5);
   assert.equal(i.options[i.correctIndex], '108');
   const dec = toChoiceVariant({ questionType: 'fill_blank', answer: '4.0902' });
   assert.equal(dec.options[dec.correctIndex], '4.0902');
 });
 
-test('toChoiceVariant: null for multiple-choice, multi-value, unparseable', () => {
+test('toChoiceVariant: relational operator answer becomes 5-option choice', () => {
+  const v = toChoiceVariant({ questionType: 'fill_blank', answer: '＝' });
+  assert.equal(v.type, 'choice');
+  assert.equal(v.options.length, 5);
+  assert.equal(v.options[v.correctIndex], '＝');
+  assert.equal(new Set(v.options).size, 5);
+});
+
+test('toChoiceVariant: multi-value answer becomes 5-option set choice', () => {
+  const v = toChoiceVariant({ questionType: 'fill_blank', answer: '12/30，8/20，4/10(本題答案僅供參考)' });
+  assert.equal(v.type, 'choice');
+  assert.equal(v.options.length, 5);
+  assert.equal(v.options[v.correctIndex], '12/30、8/20、4/10');
+  assert.match(v.optionsHtml[v.correctIndex], /<mfrac>/);
+});
+
+test('toChoiceVariant: null for multiple-choice and unparseable text', () => {
   assert.equal(toChoiceVariant({ questionType: 'multiple_choice', answer: '1' }), null);
-  assert.equal(toChoiceVariant({ questionType: 'fill_blank', answer: '8，8，40' }), null);
   assert.equal(toChoiceVariant({ questionType: 'short_answer', answer: '五分之四小時' }), null);
 });
 
