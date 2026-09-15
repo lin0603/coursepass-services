@@ -88,4 +88,7 @@ export const store = {
       .run(row.sourceQuestionId, row.nodeId, row.status, row.note, row.reviewer, row.updatedAt);
     return row;
   },
+  deleteReview(sourceQuestionId) {
+    return db.prepare('DELETE FROM reviews WHERE sourceQuestionId=?').run(sourceQuestionId).changes > 0;
+  },
 };

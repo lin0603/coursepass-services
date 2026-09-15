@@ -174,6 +174,11 @@ app.put('/v1/reviews/:id', (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
   res.json(store.upsertReview({ sourceQuestionId: req.params.id, ...parsed.data }));
 });
+app.delete('/v1/reviews/:id', (req, res) => {
+  const deleted = store.deleteReview(req.params.id);
+  if (!deleted) return res.status(404).json({ error: 'not found' });
+  res.json({ deleted: true, sourceQuestionId: req.params.id });
+});
 
 app.use((err, _req, res, _next) => {
   console.error(err);

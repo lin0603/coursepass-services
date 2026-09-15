@@ -59,7 +59,9 @@ function reviewHtml(it) {
   const opts = ['', 'approved', 'adjust', 'rejected'].map((s) => `<option value="${s}"${r.status === s ? ' selected' : ''}>${REVIEW_LABELS[s]}</option>`).join('');
   return `<section class="review" data-id="${esc(it.id)}">
     <div class="rv-row"><label>審查</label><select class="rv-status">${opts}</select>
-      <button type="button" class="rv-save">儲存</button><span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
+      <button type="button" class="rv-save">儲存</button>
+      <button type="button" class="rv-clear">清除</button>
+      <span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
     <textarea class="rv-note" rows="2" placeholder="調整註解／原因（會存到雲端）">${esc(r.note || '')}</textarea>
   </section>`;
 }
@@ -136,25 +138,38 @@ async function saveReview(id, nodeId, status, note) {
 }
 
 el.list.addEventListener('click', async (event) => {
-  const btn = event.target.closest('.rv-save');
-  if (!btn) return;
-  const section = btn.closest('.review');
+  const saveBtn = event.target.closest('.rv-save');
+  const clearBtn = event.target.closest('.rv-clear');
+  if (!saveBtn && !clearBtn) return;
+  const section = (saveBtn || clearBtn).closest('.review');
   const id = section.dataset.id;
-  const status = section.querySelector('.rv-status').value;
-  const note = section.querySelector('.rv-note').value;
   const item = state.items.find((i) => i.id === id);
   const stateEl = section.querySelector('.rv-state');
-  btn.disabled = true; stateEl.textContent = '儲存中…';
+  const badge = section.closest('.card').querySelector('.badge.rv');
   try {
+    if (clearBtn) {
+      stateEl.textContent = '清除中…';
+      const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
+      if (!res.ok && res.status !== 404) throw new Error(`${res.status}`);
+      delete state.reviews[id];
+      section.querySelector('.rv-status').value = '';
+      section.querySelector('.rv-note').value = '';
+      badge.textContent = REVIEW_LABELS[''];
+      badge.className = 'badge rv rv-none';
+      stateEl.textContent = '已清除';
+      return;
+    }
+    const status = section.querySelector('.rv-status').value;
+    const note = section.querySelector('.rv-note').value;
+    saveBtn.disabled = true; stateEl.textContent = '儲存中…';
     const saved = await saveReview(id, item ? item.node : undefined, status, note);
     state.reviews[id] = { status: saved.status, note: saved.note, updatedAt: saved.updatedAt };
     stateEl.textContent = '已儲存 ✓';
-    const badge = section.closest('.card').querySelector('.badge.rv');
     badge.textContent = REVIEW_LABELS[saved.status || ''];
     badge.className = `badge rv rv-${saved.status || 'none'}`;
   } catch (e) {
-    stateEl.textContent = '儲存失敗：' + e.message;
-  } finally { btn.disabled = false; }
+    stateEl.textContent = '失敗：' + e.message;
+  } finally { if (saveBtn) saveBtn.disabled = false; }
 });
 
 const params = new URLSearchParams(location.search);

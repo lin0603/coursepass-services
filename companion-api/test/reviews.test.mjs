@@ -24,3 +24,10 @@ test('upsert preserves unspecified fields', () => {
   assert.equal(r.nodeId, 'S-5-1'); // preserved
   assert.equal(r.reviewer, 'r'); // preserved
 });
+
+test('deleteReview removes and reports existence', () => {
+  store.upsertReview({ sourceQuestionId: 'EMA3', status: 'adjust', note: 'x' });
+  assert.equal(store.deleteReview('EMA3'), true);
+  assert.equal(store.getReview('EMA3'), null);
+  assert.equal(store.deleteReview('EMA3'), false);
+});
