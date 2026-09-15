@@ -20,8 +20,7 @@ export function computePathStatuses(nodes = [], progressByNode = {}, { masteryTh
   }));
 }
 
-export function groupByTopic(pathGroups = [], progressByNode = {}, options) {
-  const ordered = pathGroups.flatMap((g) => g.nodes || []);
+export function groupByTopic(pathGroups = [], progressByNode = {}, options) {  const ordered = pathGroups.flatMap((g) => g.nodes || []);
   const withStatus = computePathStatuses(ordered, progressByNode, options);
   const groups = [];
   const map = new Map();
@@ -31,4 +30,18 @@ export function groupByTopic(pathGroups = [], progressByNode = {}, options) {
   }
   const current = withStatus.find((n) => n.status === 'current') || null;
   return { groups, current: current ? current.id : null, completed: withStatus.filter((n) => n.status === 'completed').length, total: withStatus.length };
+}
+
+// 跨主題輪流取樣（placement 用）：先各主題第一節點，再第二…，取前 limit 個。
+export function spreadNodes(groups = [], limit = 5) {
+  const out = [];
+  const maxLen = Math.max(0, ...groups.map((g) => (g.nodes || []).length));
+  for (let i = 0; i < maxLen && out.length < limit; i++) {
+    for (const group of groups) {
+      const node = (group.nodes || [])[i];
+      if (node) out.push(node);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
 }

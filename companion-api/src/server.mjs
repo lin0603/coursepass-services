@@ -5,7 +5,7 @@ import { config } from './config.mjs';
 import { knowledge } from './knowledgeClient.mjs';
 import { assemble } from './activities.mjs';
 import { buildActivitySet } from './mixer.mjs';
-import { groupByTopic } from './path.mjs';
+import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { store } from './db.mjs';
 
@@ -103,6 +103,25 @@ app.get('/v1/learners/:learnerId/report', asyncHandler(async (req, res) => {
     unit,
     report: buildReport({ progressNodes: progress.nodes || [], wrongbook, nodes }),
   });
+}));
+
+// --- Placement: short cross-topic assessment set (Phase P2) ---
+app.get('/v1/units/:id/placement', asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 10);
+  const info = await knowledge.node(req.params.id);
+  const node = info && info.node ? info.node : {};
+  const paths = await knowledge.paths({ subject: node.subject, grade: node.grade });
+  const picked = spreadNodes(paths.groups || [], limit);
+  const items = [];
+  for (const candidate of picked) {
+    if (items.length >= limit) break;
+    const q = await knowledge.questions(candidate.id, { limit: 3, reviewStatus: 'approved' });
+    for (const item of (q.items || [])) {
+      items.push({ ...item, primaryKnowledgeNodeId: item.nodeId || candidate.id });
+      if (items.length >= limit) break;
+    }
+  }
+  res.json({ unitId: req.params.id, subject: node.subject, grade: node.grade, items: assemble(items) });
 }));
 
 // --- Learner state ---

@@ -16,7 +16,8 @@ export function mapHtml(data = {}) {
   const total = data.total != null ? data.total : groups.reduce((sum, g) => sum + (g.nodes || []).length, 0);
   const completed = data.completed != null ? data.completed : 0;
   const head = `<div class="map-head"><div class="map-head-row"><h2>${escapeHtml(data.subject || '學習地圖')}${data.grade ? ` · ${escapeHtml(String(data.grade))} 年級` : ''}</h2>
-    <button type="button" class="notes-mini" data-action="report">學習報告</button></div>
+    <div class="map-actions"><button type="button" class="notes-mini" data-action="placement">即時評估</button>
+    <button type="button" class="notes-mini" data-action="report">學習報告</button></div></div>
     <p class="small-note">已完成 ${completed}／${total} 個知識點${data.current ? ` · 目前：${escapeHtml(data.current)}` : ''}</p></div>`;
   const body = groups
     .map((group) => `<section class="map-group"><h3 class="map-topic">${escapeHtml(group.topic || '')}</h3>
@@ -25,7 +26,7 @@ export function mapHtml(data = {}) {
   return head + (body || '<p class="small-note">沒有路徑資料。</p>');
 }
 
-export async function renderMap(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4', onSelect } = {}) {
+export async function renderMap(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4', onSelect, onPlacement } = {}) {
   root.innerHTML = `<div class="phone"><div class="phone-content card center"><h2>載入地圖…</h2></div></div>`;
   let data;
   try {
@@ -42,6 +43,8 @@ export async function renderMap(root, { api, auth, learner = 'v4-demo', unit = '
   root.innerHTML = `<div class="phone"><div class="device-status"><span>9:41</span><span>● ● ▰</span></div>
     <div class="phone-content"><div class="map">${mapHtml(data)}</div></div></div>`;
   root.onclick = (event) => {
+    const placement = event.target.closest('[data-action="placement"]');
+    if (placement) { if (typeof onPlacement === 'function') onPlacement(unit); return; }
     const report = event.target.closest('[data-action="report"]');
     if (report) {
       fetchReport(api, auth, learner, unit)

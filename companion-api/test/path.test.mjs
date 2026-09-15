@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computePathStatuses, groupByTopic } from '../src/path.mjs';
+import { computePathStatuses, groupByTopic, spreadNodes } from '../src/path.mjs';
 
 const nodes = [
   { id: 'N-5-1', name: 'a', topic: '數與量' },
@@ -51,4 +51,15 @@ test('groupByTopic keeps topics and a single global current', () => {
   assert.equal(result.completed, 1);
   assert.equal(result.total, 3);
   assert.equal(result.groups[1].nodes[0].status, 'locked');
+});
+
+test('spreadNodes round-robins across topics up to limit', () => {
+  const groups = [
+    { topic: 'A', nodes: [{ id: 'A1' }, { id: 'A2' }] },
+    { topic: 'B', nodes: [{ id: 'B1' }] },
+    { topic: 'C', nodes: [{ id: 'C1' }, { id: 'C2' }] },
+  ];
+  assert.deepEqual(spreadNodes(groups, 4).map((n) => n.id), ['A1', 'B1', 'C1', 'A2']);
+  assert.deepEqual(spreadNodes(groups, 10).map((n) => n.id), ['A1', 'B1', 'C1', 'A2', 'C2']);
+  assert.deepEqual(spreadNodes([], 3), []);
 });

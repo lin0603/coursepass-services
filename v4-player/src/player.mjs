@@ -11,7 +11,7 @@ function shuffle(items) {
   return out;
 }
 
-export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4', limit = 10, onExit } = {}) {
+export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4', limit = 10, loadSet, onExit } = {}) {
   const state = { activities: [], index: 0, response: null, checked: false, results: [], selectedLeft: null, assignments: {} };
 
   const request = async (path, options = {}) => {
@@ -174,7 +174,7 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
   const init = async () => {
     root.innerHTML = `<div class="phone"><div class="phone-content card center"><h2>載入中…</h2><p class="small-note">${escapeHtml(unit)} · ${limit} 題</p></div></div>`;
     try {
-      const payload = await request(`/v1/units/${encodeURIComponent(unit)}/activity-set?limit=${limit}`);
+      const payload = typeof loadSet === 'function' ? await loadSet() : await request(`/v1/units/${encodeURIComponent(unit)}/activity-set?limit=${limit}`);
       state.activities = adaptSet(payload);
       if (!state.activities.length) throw new Error('no playable activities');
       state.index = 0; state.response = null; state.checked = false; state.results = []; state.selectedLeft = null; state.assignments = {};

@@ -1,6 +1,7 @@
 // V4 player app: learning map (default) -> lesson -> back to map.
 import { renderMap } from './map.mjs';
 import { playLesson } from './player.mjs';
+import { fetchPlacement } from './placement.mjs';
 
 const params = new URLSearchParams(location.search);
 const API = (params.get('api') || 'https://companion-api-dev.starxinteractive.com').replace(/\/$/, '');
@@ -18,7 +19,20 @@ function showMap() {
   url.searchParams.set('unit', unit);
   url.searchParams.delete('view');
   history.replaceState(null, '', url);
-  renderMap(root, { api: API, auth: AUTH, learner: LEARNER, unit, onSelect: startLesson });
+  renderMap(root, { api: API, auth: AUTH, learner: LEARNER, unit, onSelect: startLesson, onPlacement: startPlacement });
+}
+
+function startPlacement(nodeId) {
+  unit = nodeId || unit;
+  const url = new URL(location.href);
+  url.searchParams.set('unit', unit);
+  url.searchParams.set('view', 'placement');
+  history.replaceState(null, '', url);
+  playLesson(root, {
+    api: API, auth: AUTH, learner: LEARNER, unit, limit: 5,
+    loadSet: () => fetchPlacement(API, AUTH, unit, 5),
+    onExit: showMap,
+  });
 }
 
 function startLesson(nodeId) {
@@ -31,4 +45,5 @@ function startLesson(nodeId) {
 }
 
 if (params.get('view') === 'lesson' && params.get('unit')) startLesson(unit);
+else if (params.get('view') === 'placement') startPlacement(params.get('unit') || unit);
 else showMap();
