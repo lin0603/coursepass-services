@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  escapeHtml, promptHtml, optionHtml, figureHtml, questionImageHtml, choiceHtml, matchingHtml, activityCardHtml,
+  escapeHtml, promptHtml, optionHtml, figureHtml, questionImageHtml, choiceHtml, fillBlankHtml, matchingHtml, activityCardHtml,
 } from '../src/render.mjs';
 
 const frac = '<math xmlns="http://www.w3.org/1998/Math/MathML"><mfrac><mrow><mn>6</mn></mrow><mrow><mn>11</mn></mrow></mfrac></math>';
@@ -48,6 +48,13 @@ test('questionImageHtml prefers questionImageUrl over imageUrl alias', () => {
   const html = questionImageHtml({ questionImageUrl: 'https://x/new.png', imageUrl: 'https://x/old.png' });
   assert.match(html, /https:\/\/x\/new\.png/);
   assert.ok(!html.includes('old.png'));
+});
+
+test('fillBlankHtml renders one input per blank', () => {
+  assert.equal((fillBlankHtml({ blanks: 1 }).match(/data-blank=/g) || []).length, 1);
+  const three = fillBlankHtml({ blanks: 3 });
+  assert.equal((three.match(/data-blank=/g) || []).length, 3);
+  assert.match(three, /fill-blank multi/);
 });
 
 test('choiceHtml emits one button per option with indices', () => {

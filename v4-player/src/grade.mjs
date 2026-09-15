@@ -17,13 +17,40 @@ export function gradeChoice(activity, selectedIndex) {
   return Number(selectedIndex) === Number(activity.correctIndex);
 }
 
+export function parseNum(value) {
+  const t = normalizeText(value).replace(/[（）()]/g, '');
+  let m = t.match(/^-?\d+(\.\d+)?$/);
+  if (m) return Number(t);
+  m = t.match(/^(-?\d+)\/(-?\d+)$/);
+  if (m && Number(m[2]) !== 0) return Number(m[1]) / Number(m[2]);
+  return null;
+}
+
+function valueEqual(a, b) {
+  if (normalizeText(a) === normalizeText(b)) return true;
+  const na = parseNum(a);
+  const nb = parseNum(b);
+  return na !== null && nb !== null && Math.abs(na - nb) < 1e-9;
+}
+
+export function splitInput(text) {
+  return String(text ?? '').split(/[，,、;；]+/).map((s) => s.trim()).filter(Boolean);
+}
+
 export function gradeFillBlank(activity, text) {
-  const expected = activity.answer;
-  if (expected === null || expected === undefined) return false;
-  const list = Array.isArray(expected) ? expected : [expected];
-  const got = normalizeText(text);
-  if (!got) return false;
-  return list.some((e) => normalizeText(e) === got);
+  const accepts = activity.accept
+    || (activity.answer !== null && activity.answer !== undefined
+      ? (Array.isArray(activity.answer) ? activity.answer : [activity.answer])
+      : []);
+  if (!accepts.length) return false;
+  const values = splitInput(text);
+  if (!values.length) return false;
+  if (accepts.length === 1) return valueEqual(values[0], accepts[0]);
+  if (values.length !== accepts.length) return false;
+  // 各答案等值（如三個等值分數）→ 順序不拘；否則逐格比對。
+  const interchangeable = accepts.every((a) => valueEqual(a, accepts[0]));
+  if (interchangeable) return values.every((v) => accepts.some((a) => valueEqual(v, a)));
+  return values.every((v, i) => valueEqual(v, accepts[i]));
 }
 
 export function gradeMatching(activity, assignments = {}) {

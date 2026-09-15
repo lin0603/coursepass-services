@@ -1,6 +1,6 @@
 // Map a bound question to a companion activity contract.
 import { config } from './config.mjs';
-import { escapeHtml, htmlForValue, parseAnswer, toChoiceVariant } from './generate.mjs';
+import { escapeHtml, htmlForValue, parseAnswer, splitValues, stripNote, toChoiceVariant } from './generate.mjs';
 
 function fileUrl(rel) {
   if (!rel) return null;
@@ -82,10 +82,13 @@ export function toActivity(question) {
       : resolveCorrectIndex(options, rawOptions, question.answer);
   }
 
+  // 填空：清註記、拆多值（多填空）。
+  const accept = type === 'fill_blank' ? splitValues(answer) : [];
+
   const playable =
     Boolean(question.prompt) &&
     ((type === 'choice' && options.length >= 2 && correctIndex !== null) ||
-      (type === 'fill_blank' && Boolean(String(answer ?? '').trim())));
+      (type === 'fill_blank' && accept.length >= 1));
 
   // 數學選項以 MathML 呈現（分數堆疊），非數學則轉義純文字。
   const optionsHtml = type === 'choice'
@@ -111,7 +114,9 @@ export function toActivity(question) {
     options,
     optionsHtml,
     correctIndex,
-    answer,
+    answer: type === 'fill_blank' ? stripNote(answer) : answer,
+    accept: type === 'fill_blank' ? accept : null,
+    blanks: type === 'fill_blank' ? accept.length : null,
     answerHtml: question.answerHtml || null,
     placeholder: null,
     words: null,

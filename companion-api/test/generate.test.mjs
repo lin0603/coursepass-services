@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-gen-'));
 const {
-  parseAnswer, buildDistractors, toChoiceVariant, mathmlFraction, formatValue, htmlForValue,
+  parseAnswer, buildDistractors, toChoiceVariant, mathmlFraction, formatValue, htmlForValue, stripNote, splitValues,
 } = await import('../src/generate.mjs');
 
 test('parseAnswer: fraction, mixed, integer, decimal with unit', () => {
@@ -23,6 +23,23 @@ test('parseAnswer: multi-value / empty return null', () => {
   assert.equal(parseAnswer('8，8，40，3，3，15'), null);
   assert.equal(parseAnswer(''), null);
   assert.equal(parseAnswer('＝'), null);
+});
+
+test('stripNote removes trailing reference note', () => {
+  assert.equal(stripNote('4.0902(本題答案僅供參考)'), '4.0902');
+  assert.equal(stripNote('12/30，8/20（本題答案僅供參考）'), '12/30，8/20');
+  assert.equal(stripNote('(本題答案僅供參考)'), '');
+});
+
+test('splitValues splits multi-value answers but keeps fraction slashes', () => {
+  assert.deepEqual(splitValues('12/30，8/20，4/10(本題答案僅供參考)'), ['12/30', '8/20', '4/10']);
+  assert.deepEqual(splitValues('8、8、40'), ['8', '8', '40']);
+  assert.deepEqual(splitValues('5/6'), ['5/6']);
+  assert.deepEqual(splitValues(''), []);
+});
+
+test('parseAnswer ignores trailing note', () => {
+  assert.equal(parseAnswer('4.0902(本題答案僅供參考)').kind, 'decimal');
 });
 
 test('mathmlFraction / htmlForValue render stacked fractions', () => {

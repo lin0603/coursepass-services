@@ -16,9 +16,21 @@ export function mathmlFraction(whole, num, den) {
   return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">${head}<mfrac><mrow><mn>${num}</mn></mrow><mrow><mn>${den}</mn></mrow></mfrac></math>`;
 }
 
+// 去除結尾的參考註記，例如「(本題答案僅供參考)」。
+export function stripNote(text) {
+  return String(text ?? '').trim().replace(/\s*[（(][^）)]*[）)]\s*$/, '').trim();
+}
+
+// 拆多值答案（以 、，,;； 分隔；不切分數的 /）。
+export function splitValues(text) {
+  const cleaned = stripNote(text);
+  if (!cleaned) return [];
+  return cleaned.split(/[，,、;；]+/).map((s) => s.trim()).filter(Boolean);
+}
+
 // 解析純文字答案 → 值；多值/無法解析回傳 null（不生成）。
 export function parseAnswer(raw) {
-  let text = String(raw ?? '').trim();
+  let text = stripNote(raw);
   if (!text) return null;
   if (/[，,、;；]/.test(text)) return null; // 多個答案 → 略過
   let unit = '';

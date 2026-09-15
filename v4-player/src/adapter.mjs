@@ -17,6 +17,8 @@ export function toPlayerActivity(raw = {}, index = 0) {
     optionsHtml: Array.isArray(raw.optionsHtml) ? raw.optionsHtml : null,
     correctIndex: Number.isInteger(raw.correctIndex) ? raw.correctIndex : null,
     answer: raw.answer ?? null,
+    accept: Array.isArray(raw.accept) ? raw.accept : null,
+    blanks: Number.isInteger(raw.blanks) ? raw.blanks : (Array.isArray(raw.accept) ? raw.accept.length : null),
     pairs: Array.isArray(raw.pairs) ? raw.pairs : null,
     words: Array.isArray(raw.words) ? raw.words : null,
     audioText: raw.audioText || null,

@@ -54,6 +54,7 @@ h2 { font-size: 25px; margin: 8px 0; }
 .choice.selected { border-color: var(--teal); background: #e4f3ee; font-weight: 700; }
 .choice[disabled] { cursor: default; opacity: .85; }
 .fill-blank input { width: 100%; min-height: 54px; padding: 12px 16px; font: inherit; font-size: 18px; border: 2px solid #bed4d7; border-radius: 14px; }
+.fill-blank.multi { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; }
 .matching { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
 .match-col { display: grid; gap: 10px; align-content: start; }
 .match-left, .match-right { min-height: 50px; padding: 10px 12px; border: 2px solid #bed4d7; border-radius: 12px; background: #fff; font: inherit; font-size: 16px; cursor: pointer; color: var(--ink); }

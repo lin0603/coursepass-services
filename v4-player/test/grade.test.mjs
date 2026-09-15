@@ -21,8 +21,22 @@ test('gradeFillBlank accepts variants and normalizes', () => {
   assert.equal(gradeFillBlank(a, '6/11'), true);
   assert.equal(gradeFillBlank(a, '6 / 11'), true);
   assert.equal(gradeFillBlank(a, '7/11'), false);
-  const multi = { type: 'fill_blank', answer: ['正確', '對'] };
-  assert.equal(gradeFillBlank(multi, '對'), true);
+});
+
+test('gradeFillBlank accepts equivalent fractions for single blank', () => {
+  assert.equal(gradeFillBlank({ type: 'fill_blank', accept: ['12/30'] }, '2/5'), true);
+  assert.equal(gradeFillBlank({ type: 'fill_blank', accept: ['2/5'] }, '12/30'), true);
+  assert.equal(gradeFillBlank({ type: 'fill_blank', accept: ['2/5'] }, '1/2'), false);
+});
+
+test('gradeFillBlank handles multi blank (order-insensitive when interchangeable)', () => {
+  const a = { type: 'fill_blank', accept: ['12/30', '8/20', '4/10'] };
+  assert.equal(gradeFillBlank(a, '12/30，8/20，4/10'), true);
+  assert.equal(gradeFillBlank(a, '4/10，8/20，12/30'), true);  // 等值 → 順序不拘
+  assert.equal(gradeFillBlank(a, '12/30，8/20'), false);       // 數量不足
+  const ordered = { type: 'fill_blank', accept: ['8', '8', '40'] };
+  assert.equal(gradeFillBlank(ordered, '8，8，40'), true);
+  assert.equal(gradeFillBlank(ordered, '40，8，8'), false);    // 非同值 → 逐格
 });
 
 test('gradeMatching requires all pairs correct', () => {

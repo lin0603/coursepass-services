@@ -111,6 +111,17 @@ test('choice without resolvable correct answer is not playable', () => {
   assert.equal(a.playable, false);
 });
 
+test('fill_blank splits multi-value answers and strips note', () => {
+  const a = toActivity({ ...base, questionType: 'fill_blank', options: [], answer: '12/30，8/20，4/10(本題答案僅供參考)' });
+  assert.equal(a.answer, '12/30，8/20，4/10');
+  assert.deepEqual(a.accept, ['12/30', '8/20', '4/10']);
+  assert.equal(a.blanks, 3);
+  assert.equal(a.playable, true);
+  const noteOnly = toActivity({ ...base, questionType: 'fill_blank', options: [], answer: '(本題答案僅供參考)' });
+  assert.equal(noteOnly.blanks, 0);
+  assert.equal(noteOnly.playable, false);
+});
+
 test('matching/word_order placeholders are emitted as nulls (Phase C/D)', () => {
   const m = toActivity({ ...base, questionType: 'matching', options: [], answer: '' });
   assert.equal(m.type, 'matching');

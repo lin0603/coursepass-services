@@ -44,8 +44,12 @@ export function choiceHtml(activity) {
 }
 
 export function fillBlankHtml(activity) {
-  const placeholder = escapeHtml(activity.placeholder || '輸入答案');
-  return `<div class="fill-blank"><input type="text" id="fill-input" inputmode="text" autocomplete="off" placeholder="${placeholder}" aria-label="作答區"></div>`;
+  const count = Math.max(1, activity.blanks || 1);
+  const placeholder = activity.placeholder ? ` placeholder="${escapeHtml(activity.placeholder)}"` : '';
+  const inputs = Array.from({ length: count }, (_, i) =>
+    `<input type="text" class="fill-input" id="fill-input-${i}" data-blank="${i}" autocomplete="off" inputmode="text"${placeholder} aria-label="作答區 ${i + 1}">`,
+  ).join('');
+  return `<div class="fill-blank${count > 1 ? ' multi' : ''}">${inputs}</div>`;
 }
 
 export function matchingHtml(activity, rightOrder) {

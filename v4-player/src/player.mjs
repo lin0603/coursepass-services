@@ -12,7 +12,7 @@ function shuffle(items) {
 }
 
 export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4', limit = 10, loadSet, onExit } = {}) {
-  const state = { activities: [], index: 0, response: null, checked: false, results: [], selectedLeft: null, assignments: {} };
+  const state = { activities: [], index: 0, response: null, fillValues: [], checked: false, results: [], selectedLeft: null, assignments: {} };
 
   const request = async (path, options = {}) => {
     const res = await fetch(`${api}${path}`, {
@@ -67,8 +67,10 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
     if (!button) return;
     let ready = false;
     if (activity.type === 'choice') ready = state.response !== null;
-    else if (activity.type === 'fill_blank') ready = String(state.response ?? '').trim().length > 0;
-    else if (activity.type === 'matching') ready = activity.pairs.every((p) => state.assignments[p.left]);
+    else if (activity.type === 'fill_blank') {
+      const n = Math.max(1, activity.blanks || 1);
+      ready = Array.from({ length: n }, (_, i) => String(state.fillValues[i] ?? '').trim()).every((v) => v.length > 0);
+    } else if (activity.type === 'matching') ready = activity.pairs.every((p) => state.assignments[p.left]);
     button.disabled = !ready;
   };
 
@@ -97,7 +99,7 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
     const activity = state.activities[state.index];
     const correct = gradeActivity(activity, {
       index: activity.type === 'choice' ? state.response : undefined,
-      text: activity.type === 'fill_blank' ? state.response : undefined,
+      text: activity.type === 'fill_blank' ? state.fillValues.join('，') : undefined,
       assignments: activity.type === 'matching' ? activity.pairs.map((p) => state.assignments[p.left] || '') : undefined,
     });
     state.checked = true;
@@ -116,7 +118,7 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
 
   const next = () => {
     if (state.index < state.activities.length - 1) {
-      state.index += 1; state.response = null; state.checked = false; state.selectedLeft = null; state.assignments = {};
+      state.index += 1; state.response = null; state.fillValues = []; state.checked = false; state.selectedLeft = null; state.assignments = {};
       const a = state.activities[state.index];
       if (a.type === 'matching') a.rightOrder = shuffle(a.pairs.map((_, i) => i));
       render();
@@ -162,10 +164,14 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
     }
   };
   root.oninput = (event) => {
-    if (event.target.id === 'fill-input') { state.response = event.target.value; updateCheckable(); }
+    if (event.target.classList && event.target.classList.contains('fill-input')) {
+      const idx = Number(event.target.dataset.blank) || 0;
+      state.fillValues[idx] = event.target.value;
+      updateCheckable();
+    }
   };
   root.onkeydown = (event) => {
-    if (event.target.id === 'fill-input' && event.key === 'Enter') {
+    if (event.target.classList && event.target.classList.contains('fill-input') && event.key === 'Enter') {
       const button = root.querySelector('[data-action="check"]');
       if (button && !button.disabled) checkAnswer();
     }
@@ -177,7 +183,7 @@ export function playLesson(root, { api, auth, learner = 'v4-demo', unit = 'N-5-4
       const payload = typeof loadSet === 'function' ? await loadSet() : await request(`/v1/units/${encodeURIComponent(unit)}/activity-set?limit=${limit}`);
       state.activities = adaptSet(payload);
       if (!state.activities.length) throw new Error('no playable activities');
-      state.index = 0; state.response = null; state.checked = false; state.results = []; state.selectedLeft = null; state.assignments = {};
+      state.index = 0; state.response = null; state.fillValues = []; state.checked = false; state.results = []; state.selectedLeft = null; state.assignments = {};
       const first = state.activities[0];
       if (first.type === 'matching') first.rightOrder = shuffle(first.pairs.map((_, i) => i));
       render();
