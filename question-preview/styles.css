@@ -88,12 +88,22 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .app-tile { position: absolute; box-sizing: border-box; border: 2px solid #cdd9d6; border-radius: 6px; background-repeat: no-repeat; background-color: #fff; }
 .app-match-board { overflow: hidden; }
 .match-lines { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
-.match-line { fill: none; stroke: #9aa9a6; stroke-width: 4; stroke-linecap: round; opacity: .85; }
+.match-line { fill: none; stroke: #9aa9a6; stroke-width: 3; stroke-linecap: round; opacity: .85; }
 .match-line.correct { stroke: #159447; }
 .match-line.wrong { stroke: #d44b4b; stroke-dasharray: 10 7; }
-.app-match-tile { z-index: 2; appearance: none; cursor: pointer; padding: 2px; color: #17211f; font: 600 11px/1.2 -apple-system, "PingFang TC", system-ui, sans-serif; text-align: center; overflow: hidden; }
+/* 互動題：純 HTML 重畫的按鍵（上方條件、下方分數） */
+.app-match-html { position: relative; display: flex; flex-direction: column; gap: 96px; padding: 16px 12px; background: #fff; border: 1px solid #e2ebe7; border-radius: 10px; }
+.match-row { display: grid; gap: 8px; position: relative; z-index: 2; }
+.match-bottom .app-match-tile { font-size: 13px; }
+.app-match-tile { position: relative; appearance: none; cursor: pointer; color: #17211f; font: 600 12px/1.45 -apple-system, "PingFang TC", system-ui, sans-serif; text-align: center; border: 1.5px solid #cbd5d1; border-radius: 8px; background: #f4f7f6; padding: 8px 6px; }
 .app-match-tile:hover, .app-match-tile.selected { border-color: #087e8b; box-shadow: 0 0 0 3px rgba(8, 126, 139, .22); }
 .app-match-tile.selected { background-color: #e4f3ee; }
+.match-node .match-dot { position: absolute; left: 50%; width: 7px; height: 7px; border-radius: 50%; background: #2b2b2b; transform: translateX(-50%); }
+.match-top .match-dot { bottom: -15px; }
+.match-bottom .match-dot { top: -15px; }
+.frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 2px; line-height: 1.05; font-size: .95em; }
+.frac .num { border-bottom: 1.4px solid currentColor; padding: 0 3px; }
+.frac .den { padding: 0 3px; }
 .app-match-help { color: #536c72; font-size: 12px; margin: 7px 0 0; }
 .app-match-result { margin-top: 3px; }
 .app-tile.pair-0 { border-color: #e05252; } .app-tile.pair-1 { border-color: #e0a03a; }

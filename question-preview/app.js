@@ -47,15 +47,35 @@ function cropBg(img, box) {
 
 function matchingKey(a, b) { return `${a}:${b}`; }
 
-function matchingLineHtml(m, play) {
-  return (play.lines || []).map((line) => {
-    const from = m.boxes[line.a].box;
-    const to = m.boxes[line.b].box;
-    const x1 = (from[1] + from[3]) / 2;
-    const y1 = (from[0] + from[2]) / 2;
-    const x2 = (to[1] + to[3]) / 2;
-    const y2 = (to[0] + to[2]) / 2;
-    return `<line class="match-line ${line.correct ? 'correct' : 'wrong'}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+function fracHtml(label) {
+  return esc(label).replace(/(\d+)\s*\/\s*(\d+)/g, (_, n, d) => `<span class="frac"><span class="num">${n}</span><span class="den">${d}</span></span>`);
+}
+
+function matchNodeHtml(b, i, side, play) {
+  const sel = play.selected === i ? ' selected' : '';
+  return `<button type="button" class="app-match-tile match-node match-${side}${sel}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}">${fracHtml(b.label || '')}<span class="match-dot"></span></button>`;
+}
+
+// 連線以量測後的像素座標繪製（純 HTML 按鍵的排版非固定比例）
+function drawMatchLines() {
+  const board = document.querySelector('.app-match-board[data-match-id="EMA1509000187"]');
+  const svg = board && board.querySelector('.match-lines');
+  if (!svg) return;
+  const rect = board.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const play = state.matchingPlay[board.dataset.matchId] || { lines: [] };
+  const center = (index) => {
+    const dot = board.querySelector(`.app-match-tile[data-match-index="${index}"] .match-dot`);
+    if (!dot) return null;
+    const r = dot.getBoundingClientRect();
+    return { x: r.left - rect.left + r.width / 2, y: r.top - rect.top + r.height / 2 };
+  };
+  svg.innerHTML = (play.lines || []).map((line) => {
+    const a = center(line.a);
+    const b = center(line.b);
+    if (!a || !b) return '';
+    return `<line class="match-line ${line.correct ? 'correct' : 'wrong'}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
   }).join('');
 }
 
@@ -66,6 +86,8 @@ function matchingResult(m, play) {
   if (play.lines?.some((line) => !line.correct)) return `有配對不正確（${correct.size}/${expected.size}）`;
   return `已完成 ${correct.size}/${expected.size} 條配對`;
 }
+
+window.addEventListener('resize', drawMatchLines);
 
 // 連連看：裁切各元件，依原圖座標（絕對定位）排列；同色＝同一配對（依答案）。
 function matchingView(it) {
@@ -79,21 +101,28 @@ function matchingView(it) {
   const play = state.matchingPlay[it.id] || { selected: null, lines: [] };
   const group = {};
   (m.pairs || []).forEach((p, gi) => { group['a' + p.a] = gi; group['b' + p.b] = gi; });
-  const tiles = m.boxes.map((b, i) => {
-    const [y1, x1, y2, x2] = b.box;
-    const style = `left:${(x1 / 1000 * 100).toFixed(2)}%;top:${(y1 / 1000 * 100).toFixed(2)}%;width:${((x2 - x1) / 1000 * 100).toFixed(2)}%;height:${((y2 - y1) / 1000 * 100).toFixed(2)}%;${cropBg(m.image, b.box)}`;
-    const g = group['a' + i] !== undefined ? group['a' + i] : group['b' + i];
-    const cls = interactive ? '' : (g === undefined ? '' : `pair-${g % 8}`);
-    const selected = interactive && play.selected === i ? ' selected' : '';
-    const tag = interactive ? 'button' : 'div';
-    const attrs = interactive ? `type="button" class="app-tile app-match-tile${selected}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}"` : `class="app-tile ${cls}" title="${esc(b.label || '')}"`;
-    return `<${tag} ${attrs} style="${style}">${interactive ? esc(b.label || '') : ''}</${tag}>`;
-  }).join('');
-  if (!interactive) return `<div class="app-canvas" style="aspect-ratio:${W} / ${H}">${tiles}</div>
-    <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
-  return `<div class="app-canvas app-match-board" data-match-id="${esc(it.id)}" style="aspect-ratio:${W} / ${H}">
-    <svg class="match-lines" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">${matchingLineHtml(m, play)}</svg>${tiles}</div>
-    <p class="app-match-help">先點左側條件，再點右側分數。${play.selected === null ? '' : '請選擇對應的右側分數。'}</p>
+  if (!interactive) {
+    const tiles = m.boxes.map((b, i) => {
+      const [y1, x1, y2, x2] = b.box;
+      const style = `left:${(x1 / 1000 * 100).toFixed(2)}%;top:${(y1 / 1000 * 100).toFixed(2)}%;width:${((x2 - x1) / 1000 * 100).toFixed(2)}%;height:${((y2 - y1) / 1000 * 100).toFixed(2)}%;${cropBg(m.image, b.box)}`;
+      const g = group['a' + i] !== undefined ? group['a' + i] : group['b' + i];
+      const cls = g === undefined ? '' : `pair-${g % 8}`;
+      return `<div class="app-tile ${cls}" style="${style}" title="${esc(b.label || '')}"></div>`;
+    }).join('');
+    return `<div class="app-canvas" style="aspect-ratio:${W} / ${H}">${tiles}</div>
+      <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
+  }
+  // 互動題：以純 HTML 重畫按鍵（上方條件、下方分數），連線量測後繪製
+  const left = new Set((m.pairs || []).map((p) => p.a));
+  const right = new Set((m.pairs || []).map((p) => p.b));
+  const topNodes = m.boxes.map((b, i) => (left.has(i) ? matchNodeHtml(b, i, 'top', play) : '')).join('');
+  const bottomNodes = m.boxes.map((b, i) => (right.has(i) ? matchNodeHtml(b, i, 'bottom', play) : '')).join('');
+  return `<div class="app-match-board app-match-html" data-match-id="${esc(it.id)}">
+    <div class="match-row match-top" style="grid-template-columns:repeat(${Math.max(1, left.size)}, 1fr)">${topNodes}</div>
+    <svg class="match-lines" aria-hidden="true"></svg>
+    <div class="match-row match-bottom" style="grid-template-columns:repeat(${Math.max(1, right.size)}, 1fr)">${bottomNodes}</div>
+  </div>
+    <p class="app-match-help">先點上方條件，再點下方分數。${play.selected === null ? '' : '請選擇對應的下方分數。'}</p>
     <p class="app-correct app-match-result">${matchingResult(m, play)}</p>`;
 }
 
@@ -188,6 +217,7 @@ function render() {
     frag.appendChild(card);
   }
   el.list.appendChild(frag);
+  requestAnimationFrame(drawMatchLines);
   el.more.innerHTML = '';
   if (list.length > state.limit) {
     const b = document.createElement('button');
