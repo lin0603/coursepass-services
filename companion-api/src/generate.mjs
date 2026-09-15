@@ -255,13 +255,27 @@ function textCandidates(answer) {
     const num = cnToNum(cf[2]);
     const rest = cf[3] || '';
     if (den && num) {
-      const forms = [[num, den + 1], [num, den - 1], [num + 1, den], [num - 1, den], [den, num]];
-      for (const [n, d] of forms) {
-        if (n < 1 || d < 2) continue;
+      const correct = num / den;
+      const seenVal = new Set([correct]);
+      const seenStr = new Set([answer]);
+      const forms = [];
+      for (const dn of [-2, -1, 1, 2]) for (const nn of [-2, -1, 1, 2]) {
+        const n = num + nn;
+        const d = den + dn;
+        if (n < 1 || d < 2 || n >= d) continue; // 僅真分數
+        const val = n / d;
+        if (seenVal.has(val)) continue;
         const cnN = numToCn(n);
         const cnD = numToCn(d);
-        if (cnN && cnD) cands.push(`${cnD}分之${cnN}${rest}`);
+        if (!cnN || !cnD) continue;
+        const s = `${cnD}分之${cnN}${rest}`;
+        if (seenStr.has(s)) continue;
+        seenStr.add(s);
+        seenVal.add(val);
+        forms.push({ val, s });
       }
+      forms.sort((a, b) => Math.abs(a.val - correct) - Math.abs(b.val - correct));
+      for (const f of forms) cands.push(f.s);
     }
   }
   for (const m of answer.matchAll(/\d+(?:\.\d+)?/g)) {

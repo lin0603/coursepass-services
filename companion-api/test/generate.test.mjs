@@ -52,7 +52,10 @@ test('toChoiceVariant: Chinese fraction answer via text approximation', () => {
   assert.equal(v.type, 'choice');
   assert.equal(v.options.length, 5);
   assert.equal(v.options[v.correctIndex], '五分之四小時');
-  assert.ok(v.options.some((o) => o === '五分之三小時'));
+  assert.equal(new Set(v.options).size, 5);
+  // 每個誘答都是不同的真分數值
+  const valOf = (s) => { const m = s.match(/^([一二三四五六七八九十]+)分之([一二三四五六七八九十]+)/); return m ? `${m[1]}/${m[2]}` : s; };
+  assert.equal(new Set(v.options.map(valOf)).size, 5);
 });
 
 test('toChoiceVariant: embedded-number text answer', () => {
