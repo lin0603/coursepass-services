@@ -77,3 +77,8 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .badge.rv-approved { background: #eaf5ee; color: #236251; }
 .badge.rv-adjust { background: #fdf1e0; color: #8a5a12; }
 .badge.rv-rejected { background: #fbeceb; color: #a6403b; }
+
+/* 題目原圖（左下區塊） */
+.fig-block { margin-top: 14px; }
+.fig-block .fig-cap { font-size: 12px; color: #8b93a5; margin-bottom: 4px; }
+.fig-block .fig img { max-width: 100%; border: 1px solid #2a3140; border-radius: 8px; background: #fff; }

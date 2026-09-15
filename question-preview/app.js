@@ -110,8 +110,9 @@ function render() {
       <div class="card-cols">
         <div class="col-left">
           <div class="prompt">${it.promptHtml || esc(it.prompt)}</div>
-          <div class="body">
-            <div class="opts">${rows || `<div class="ans">答案：${it.answerHtml || esc(deFull(it.answer))}</div>`}</div>
+          <div class="opts">${rows || `<div class="ans">答案：${it.answerHtml || esc(deFull(it.answer))}</div>`}</div>
+          <div class="fig-block">
+            <div class="fig-cap">題目原圖</div>
             ${it.imageUrl ? `<a class="fig" href="${it.imageUrl}" target="_blank"><img loading="lazy" src="${it.imageUrl}" alt="題目原圖"></a>` : '<div class="noimg">無圖</div>'}
           </div>
         </div>
