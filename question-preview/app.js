@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, reviews: {}, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   search: document.getElementById('search'),
@@ -45,6 +45,28 @@ function cropBg(img, box) {
   return `background-image:url('${img}');background-size:${sizeW}% ${sizeH}%;background-position:${posX}% ${posY}%;`;
 }
 
+function matchingKey(a, b) { return `${a}:${b}`; }
+
+function matchingLineHtml(m, play) {
+  return (play.lines || []).map((line) => {
+    const from = m.boxes[line.a].box;
+    const to = m.boxes[line.b].box;
+    const x1 = (from[1] + from[3]) / 2;
+    const y1 = (from[0] + from[2]) / 2;
+    const x2 = (to[1] + to[3]) / 2;
+    const y2 = (to[0] + to[2]) / 2;
+    return `<line class="match-line ${line.correct ? 'correct' : 'wrong'}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+  }).join('');
+}
+
+function matchingResult(m, play) {
+  const expected = new Set((m.pairs || []).map((p) => matchingKey(p.a, p.b)));
+  const correct = new Set((play.lines || []).filter((line) => line.correct).map((line) => matchingKey(line.a, line.b)));
+  if (correct.size === expected.size && [...expected].every((key) => correct.has(key))) return '全部配對正確 ✓';
+  if (play.lines?.some((line) => !line.correct)) return `有配對不正確（${correct.size}/${expected.size}）`;
+  return `已完成 ${correct.size}/${expected.size} 條配對`;
+}
+
 // 連連看：裁切各元件，依原圖座標（絕對定位）排列；同色＝同一配對（依答案）。
 function matchingView(it) {
   const m = state.matching[it.id];
@@ -53,17 +75,26 @@ function matchingView(it) {
   }
   const W = m.width || 1000;
   const H = m.height || 1000;
+  const interactive = it.id === 'EMA1509000187';
+  const play = state.matchingPlay[it.id] || { selected: null, lines: [] };
   const group = {};
   (m.pairs || []).forEach((p, gi) => { group['a' + p.a] = gi; group['b' + p.b] = gi; });
   const tiles = m.boxes.map((b, i) => {
     const [y1, x1, y2, x2] = b.box;
     const style = `left:${(x1 / 1000 * 100).toFixed(2)}%;top:${(y1 / 1000 * 100).toFixed(2)}%;width:${((x2 - x1) / 1000 * 100).toFixed(2)}%;height:${((y2 - y1) / 1000 * 100).toFixed(2)}%;${cropBg(m.image, b.box)}`;
     const g = group['a' + i] !== undefined ? group['a' + i] : group['b' + i];
-    const cls = g === undefined ? '' : `pair-${g % 8}`;
-    return `<div class="app-tile ${cls}" style="${style}" title="${esc(b.label || '')}"></div>`;
+    const cls = interactive ? '' : (g === undefined ? '' : `pair-${g % 8}`);
+    const selected = interactive && play.selected === i ? ' selected' : '';
+    const tag = interactive ? 'button' : 'div';
+    const attrs = interactive ? `type="button" class="app-tile app-match-tile${selected}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}"` : `class="app-tile ${cls}" title="${esc(b.label || '')}"`;
+    return `<${tag} ${attrs} style="${style}">${interactive ? esc(b.label || '') : ''}</${tag}>`;
   }).join('');
-  return `<div class="app-canvas" style="aspect-ratio:${W} / ${H}">${tiles}</div>
+  if (!interactive) return `<div class="app-canvas" style="aspect-ratio:${W} / ${H}">${tiles}</div>
     <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
+  return `<div class="app-canvas app-match-board" data-match-id="${esc(it.id)}" style="aspect-ratio:${W} / ${H}">
+    <svg class="match-lines" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">${matchingLineHtml(m, play)}</svg>${tiles}</div>
+    <p class="app-match-help">先點左側條件，再點右側分數。${play.selected === null ? '' : '請選擇對應的右側分數。'}</p>
+    <p class="app-correct app-match-result">${matchingResult(m, play)}</p>`;
 }
 
 // App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
@@ -182,6 +213,29 @@ async function saveReview(id, nodeId, status, note) {
 }
 
 el.list.addEventListener('click', async (event) => {
+  const matchTile = event.target.closest('.app-match-tile');
+  if (matchTile) {
+    const board = matchTile.closest('.app-match-board');
+    const id = board && board.dataset.matchId;
+    const m = id && state.matching[id];
+    if (!m) return;
+    const index = Number(matchTile.dataset.matchIndex);
+    const leftIndexes = new Set((m.pairs || []).map((pair) => pair.a));
+    const rightIndexes = new Set((m.pairs || []).map((pair) => pair.b));
+    const play = state.matchingPlay[id] || { selected: null, lines: [] };
+    if (leftIndexes.has(index)) {
+      play.selected = index;
+    } else if (rightIndexes.has(index) && play.selected !== null) {
+      const key = matchingKey(play.selected, index);
+      const expected = new Set((m.pairs || []).map((pair) => matchingKey(pair.a, pair.b)));
+      const alreadyCorrect = (play.lines || []).some((line) => line.correct && matchingKey(line.a, line.b) === key);
+      if (!alreadyCorrect) play.lines.push({ a: play.selected, b: index, correct: expected.has(key) });
+      play.selected = null;
+    }
+    state.matchingPlay[id] = play;
+    render();
+    return;
+  }
   const saveBtn = event.target.closest('.rv-save');
   const clearBtn = event.target.closest('.rv-clear');
   if (!saveBtn && !clearBtn) return;
