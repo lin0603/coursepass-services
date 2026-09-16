@@ -159,3 +159,17 @@ th.act, td.act { width: 64px; text-align: center; }
 .preview-overlay[hidden] { display: none; }
 
 .layout[hidden] { display: none; }
+
+/* 資源儀表板 */
+.dash-filters { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+select.mini-btn { padding: 4px 10px; }
+.res-wrap { overflow: auto; }
+.res-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.res-table th, .res-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.res-table th { color: var(--muted); font-weight: 600; }
+.res-table .act { white-space: nowrap; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.chip { font-size: 12px; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--line); }
+.chip.yes { background: #10352a; color: #57d9a3; border-color: #1c5a45; }
+.chip.no { background: #1a1d24; color: #6b7280; }
+.cpct { color: var(--muted); font-size: 12px; }

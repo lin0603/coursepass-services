@@ -345,32 +345,64 @@ function showView(which, archiveSlug) {
 el.navDash.addEventListener('click', () => showView('dash'));
 el.navBrowse.addEventListener('click', () => showView('browse'));
 
+const ARTIFACT_LABELS = { questions: '題庫', appdata: 'App活動', explanations: 'AI解題', quality: '品質', matching: '連連看' };
+let RES = { keys: ['questions', 'appdata', 'explanations', 'quality', 'matching'], items: [] };
+let progressByCourse = {};
+
+function renderResRows() {
+  const fe = document.getElementById('fEdition').value;
+  const fg = document.getElementById('fGrade').value;
+  const fs = document.getElementById('fSubject').value;
+  const rows = RES.items.filter((r) => (!fe || String(r.edition) === fe) && (!fg || String(r.grade) === fg) && (!fs || r.subject === fs));
+  const ready = rows.filter((r) => r.artifacts && r.artifacts.questions).length;
+  document.getElementById('resSummary').textContent = `${rows.length} 個資源 · 已備題庫 ${ready} 個`;
+  document.getElementById('resRows').innerHTML = rows.map((r) => {
+    const p = progressByCourse[r.courseId] || {};
+    const done = p.done || 0; const qn = r.questionCount || 0;
+    const pct = qn ? Math.round((done / qn) * 100) : 0;
+    const chips = RES.keys.map((k) => {
+      const has = r.artifacts && r.artifacts[k];
+      return `<span class="chip ${has ? 'yes' : 'no'}">${ARTIFACT_LABELS[k] || k}${has ? '✓' : '–'}</span>`;
+    }).join('');
+    const n = RES.keys.filter((k) => r.artifacts && r.artifacts[k]).length;
+    const cpct = Math.round((n / (RES.keys.length || 1)) * 100);
+    const entry = (r.courseId && r.artifacts && r.artifacts.questions)
+      ? `<a class="mini-btn on" href="${REVIEW_SITE}/?course=${encodeURIComponent(r.courseId)}" target="_blank" rel="noopener">進入審題站</a>`
+      : '<span class="muted">尚未建置</span>';
+    return `<tr>
+      <td>${escapeHtml(r.publisherName || r.publisher || '')}</td>
+      <td>${escapeHtml(String(r.edition || ''))}</td>
+      <td>${escapeHtml(String(r.grade || ''))}</td>
+      <td>${escapeHtml(String(r.subject || ''))}</td>
+      <td><div class="chips">${chips}</div><div class="cpct">${n}/${RES.keys.length}（${cpct}%）</div></td>
+      <td>${qn ? `${done} / ${qn}（${pct}%）` : '<span class="muted">—</span>'}</td>
+      <td class="act">${entry}${r.archiveSlug ? ` <button class="mini-btn" data-archive="${escapeHtml(r.archiveSlug)}">資源包</button>` : ''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="muted">無符合資源</td></tr>';
+  document.querySelectorAll('#resRows [data-archive]').forEach((b) => b.addEventListener('click', () => showView('browse', b.dataset.archive)));
+}
+
 async function renderDash() {
-  let courses = [];
-  try { courses = (await (await fetch(COURSES_URL)).json()).courses || []; } catch { /* ignore */ }
-  let progress = {};
+  const RES_URL = (document.querySelector('meta[name="resources-url"]') || {}).content || '';
+  RES = { keys: ['questions', 'appdata', 'explanations', 'quality', 'matching'], items: [] };
   try {
-    for (const p of (((await (await fetch(`${API}/v1/course-progress`, { headers: H })).json()).items) || [])) progress[p.courseId] = p;
+    const d = await (await fetch(RES_URL)).json();
+    RES.keys = d.artifactKeys || RES.keys;
+    RES.items = d.items || [];
   } catch { /* ignore */ }
-  el.subtitle.textContent = `${courses.length} 個課程 · 審題進度總覽`;
-  el.courseCards.innerHTML = courses.map((c) => {
-    const p = progress[c.courseId] || {};
-    const total = c.questionCount || 0;
-    const done = p.done || 0;
-    const pct = total ? Math.round((done / total) * 100) : 0;
-    const link = `${REVIEW_SITE}/?course=${encodeURIComponent(c.courseId)}`;
-    return `<div class="course-card">
-      <div class="cc-title">${escapeHtml(c.name || c.courseId)}</div>
-      <div class="cc-meta">${escapeHtml(c.publisher || '')} · ${escapeHtml(String(c.grade || ''))} 年級 · ${escapeHtml(c.subject || '')}</div>
-      <div class="cc-progress"><div class="bar"><span style="width:${pct}%"></span></div><span class="cc-pct">${done} / ${total} 題（${pct}%）</span></div>
-      <div class="cc-sub">審查意見 ${p.reviews || 0} 筆 · 指派 ${p.assignedDone || 0}/${p.assigned || 0}</div>
-      <div class="cc-actions">
-        <a class="mini-btn on" href="${link}" target="_blank" rel="noopener">進入審題站</a>
-        ${c.archiveSlug ? `<button class="mini-btn" data-archive="${escapeHtml(c.archiveSlug)}">資源包</button>` : ''}
-      </div>
-    </div>`;
-  }).join('') || '<p class="muted">尚無課程（請在 courses.json 新增）。</p>';
-  el.courseCards.querySelectorAll('[data-archive]').forEach((b) => b.addEventListener('click', () => showView('browse', b.dataset.archive)));
+  try {
+    progressByCourse = {};
+    const dp = await (await fetch(`${API}/v1/course-progress`, { headers: H })).json();
+    for (const p of (dp.items || [])) progressByCourse[p.courseId] = p;
+  } catch { /* ignore */ }
+  const eds = [...new Set(RES.items.map((r) => r.edition).filter(Boolean))];
+  const grs = [...new Set(RES.items.map((r) => r.grade).filter(Boolean))].sort((a, b) => a - b);
+  const subs = [...new Set(RES.items.map((r) => r.subject).filter(Boolean))];
+  const fillSel = (id, vals) => { const sel = document.getElementById(id); sel.innerHTML = '<option value="">全部</option>' + vals.map((v) => `<option value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</option>`).join(''); };
+  fillSel('fEdition', eds); fillSel('fGrade', grs); fillSel('fSubject', subs);
+  el.subtitle.textContent = `${RES.items.length} 個資源 · 資料完整度總覽`;
+  ['fEdition', 'fGrade', 'fSubject'].forEach((id) => { document.getElementById(id).onchange = renderResRows; });
+  renderResRows();
 }
 
 async function start() {

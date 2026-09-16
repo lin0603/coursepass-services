@@ -6,9 +6,10 @@
   <meta name="reviews-api" content="https://companion-api-dev.starxinteractive.com">
   <meta name="reviews-token" content="cp-dev-token-change-me">
   <meta name="courses-url" content="https://resource-files-dev.starxinteractive.com/preview/courses.json">
+  <meta name="resources-url" content="https://resource-files-dev.starxinteractive.com/preview/resources.json">
   <meta name="review-site" content="https://question-preview-dev.starxinteractive.com">
   <title>CoursePass 審題入口</title>
-  <link rel="stylesheet" href="./styles.css?v=20260916b">
+  <link rel="stylesheet" href="./styles.css?v=20260916c">
 </head>
 <body>
   <div id="loginGate" class="login-gate" hidden>
@@ -37,7 +38,21 @@
   </header>
 
   <main id="dash" class="dash">
-    <div id="courseCards" class="course-cards"></div>
+    <div class="dash-filters">
+      <select id="fEdition" class="mini-btn"><option value="">全部版本</option></select>
+      <select id="fGrade" class="mini-btn"><option value="">全部年級</option></select>
+      <select id="fSubject" class="mini-btn"><option value="">全部科目</option></select>
+      <span class="muted" id="resSummary"></span>
+    </div>
+    <div class="table-wrap res-wrap">
+      <table class="res-table">
+        <thead><tr>
+          <th>出版社</th><th>版本</th><th>年級</th><th>科目</th>
+          <th>資料完整度</th><th>審題進度</th><th class="act">入口</th>
+        </tr></thead>
+        <tbody id="resRows"></tbody>
+      </table>
+    </div>
   </main>
 
   <div class="layout" id="browser" hidden>
@@ -91,6 +106,6 @@
   </div>
 
   <script src="./mammoth.browser.min.js"></script>
-  <script src="./app.js?v=20260916b"></script>
+  <script src="./app.js?v=20260916c"></script>
 </body>
 </html>
