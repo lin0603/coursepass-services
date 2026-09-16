@@ -14,6 +14,7 @@ const el = {
   fImage: document.getElementById('fImage'),
   fQuality: document.getElementById('fQuality'),
   meSelect: document.getElementById('meSelect'),
+  myProgress: document.getElementById('myProgress'),
   addReviewer: document.getElementById('addReviewer'),
   assignToggle: document.getElementById('assignToggle'),
   assignPanel: document.getElementById('assignPanel'),
@@ -54,6 +55,20 @@ function reviewOf(id) {
 function othersOf(id) { return (state.qreviews[id] || []).filter((r) => r.reviewerId !== state.me); }
 function reviewerName(id) { const r = state.reviewers.find((x) => x.id === id); return r ? r.name : (id ? id : '未指定'); }
 function assignmentsOf(id) { return state.assignments[id] || []; }
+function allAssignments() { return Object.values(state.assignments).flat(); }
+function assignedSet() { return new Set(Object.keys(state.assignments)); }
+function updateMyProgress() {
+  if (!el.myProgress) return;
+  if (!state.me) { el.myProgress.textContent = ''; return; }
+  const mine = allAssignments().filter((a) => a.reviewerId === state.me);
+  const done = mine.filter((a) => a.status === 'done').length;
+  el.myProgress.textContent = `我：待審 ${mine.length - done} / 已審 ${done}`;
+}
+function assignHtml(id) {
+  const rows = state.assignments[id] || [];
+  if (!rows.length) return '';
+  return `<span class="badge asg">指派：${rows.map((a) => `${esc(reviewerName(a.reviewerId))}·${a.status === 'done' ? '已審' : '待審'}`).join('、')}</span>`;
+}
 
 // 可選題型（活動層）與「建議題型」
 const TYPES = [['choice', '點選'], ['fill_blank', '填空'], ['word_order', '排序'], ['matching', '連連看'], ['listening', '聽力']];
@@ -411,6 +426,7 @@ function render() {
         <span class="badge node">${esc(it.node || '未綁定')} ${esc(it.nodeName || '')}</span>
         <span class="badge diff">難度 ${esc(it.difficulty ?? '')}</span>
         ${((state.quality[it.id] || {}).status === 'needs_review') ? `<span class="badge qbad" title="${esc(((state.quality[it.id] || {}).reasons || []).join(', '))}">品質需檢查</span>` : ''}
+        ${assignHtml(it.id)}
         <span class="badge rv rv-${esc(rev.status || 'none')}">${REVIEW_LABELS[rev.status || '']}</span>
       </div>
       ${it.chapter ? `<div class="lesson">${esc(it.chapter)}</div>` : (it.lesson ? `<div class="lesson">${esc(it.lesson)}</div>` : '')}
@@ -448,6 +464,7 @@ function render() {
     moreObserver.disconnect(); moreObserver = null;
   }
   el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
+  updateMyProgress();
 }
 function fill(sel, values, label) {
   for (const v of values) { const o = document.createElement('option'); o.value = v; o.textContent = `${v}`; sel.appendChild(o); }
@@ -721,11 +738,14 @@ async function exportCsv() {
 function renderAssignPanel() {
   if (el.assignPanel.hidden) return;
   const pool = filtered();
+  const assignedIds = assignedSet();
+  const assignedN = pool.filter((it) => assignedIds.has(it.id)).length;
+  const availN = pool.length - assignedN;
   const rows = state.reviewers.length
     ? state.reviewers.map((r) => `<div class="asg-row"><span class="asg-name">${esc(r.name)}</span><input class="asg-count" type="number" min="0" value="0" data-id="${esc(r.id)}"> 題</div>`).join('')
     : '<div class="hint">尚無審查人，請先按「＋新增」。</div>';
   el.assignPanel.innerHTML = `<h3>審查分配（雙審：每題 2 位不同審查人）</h3>
-    <p class="hint">題池＝目前篩選結果，共 <b>${pool.length}</b> 題（建立時會排除已指派者）。填各人題數（可不相等），系統兩兩配對；「預覽」不會寫入。</p>
+    <p class="hint">題池＝目前篩選，共 <b>${pool.length}</b> 題（已指派 <b>${assignedN}</b>、<b>可分配 ${availN}</b>）。填各人題數（可不相等）→系統兩兩配對；「預覽」不寫入。</p>
     ${rows}
     <div class="asg-row"><button type="button" class="mini-btn" id="asgPreview">預覽</button><button type="button" class="mini-btn on" id="asgCreate">建立指派</button><button type="button" class="mini-btn" id="asgExport">匯出 CSV</button><span class="asg-state" id="asgState"></span></div>
     <div class="asg-progress" id="asgProgress"></div>`;
@@ -737,6 +757,8 @@ async function reloadAssignments() {
     state.assignments = {};
     for (const a of (d.items || [])) (state.assignments[a.sourceQuestionId] = state.assignments[a.sourceQuestionId] || []).push(a);
     loadProgress();
+    render();
+    renderAssignPanel();
   } catch { /* ignore */ }
 }
 async function runAssign(preview) {
@@ -754,7 +776,11 @@ async function runAssign(preview) {
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || res.status);
     if (preview) st.textContent = `預覽：可分配 ${d.questions} 題、${d.assignments} 筆指派`;
-    else { st.textContent = `已建立：${d.questions} 題、${d.assignments} 筆`; await reloadAssignments(); }
+    else {
+      await reloadAssignments();
+      const st2 = document.getElementById('asgState');
+      if (st2) st2.textContent = `已建立並保留：${d.questions} 題、${d.assignments} 筆`;
+    }
   } catch (e) { st.textContent = '失敗：' + e.message; }
 }
 el.meSelect.addEventListener('change', (e) => { state.me = e.target.value; localStorage.setItem('cp_me', state.me); render(); });

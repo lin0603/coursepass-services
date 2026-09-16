@@ -145,6 +145,7 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .ai-none { color: #9aa9a6; }
 .rv-note { width: 100%; margin-top: 8px; border: 1px solid #bed4d7; border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
 .badge.qbad { background: #fbeceb; color: #a6403b; border: 1px solid #e3c9c7; }
+.badge.asg { background: #eef2fb; color: #3b4d7a; border: 1px solid #cdd7ee; }
 .badge.rv { background: #eef4f1; color: #42606a; }
 .badge.rv-approved { background: #eaf5ee; color: #236251; }
 .badge.rv-adjust { background: #fdf1e0; color: #8a5a12; }
