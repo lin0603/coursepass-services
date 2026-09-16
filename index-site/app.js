@@ -348,6 +348,14 @@ function showView(which, archiveSlug) {
   }
 }
 el.navDash.addEventListener('click', () => showView('dash'));
+const helpModal = document.getElementById('helpModal');
+function showHelp(show) { if (helpModal) helpModal.hidden = !show; }
+const helpBtn = document.getElementById('helpBtn');
+const helpClose = document.getElementById('helpClose');
+if (helpBtn) helpBtn.addEventListener('click', () => showHelp(true));
+if (helpClose) helpClose.addEventListener('click', () => showHelp(false));
+if (helpModal) helpModal.addEventListener('click', (e) => { if (e.target === helpModal) showHelp(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && helpModal && !helpModal.hidden) showHelp(false); });
 el.navBrowse.addEventListener('click', () => showView('browse'));
 
 const ARTIFACT_LABELS = { questions: '題庫', appdata: 'App活動', explanations: 'AI解題', quality: '品質', matching: '連連看' };
