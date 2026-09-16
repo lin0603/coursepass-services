@@ -215,6 +215,7 @@ app.get('/v1/reviews/export', (req, res) => {
   res.json({ count: items.length, items });
 });
 app.get('/v1/reviews', (req, res) => res.json({ items: store.listQuestionReviews({ sourceQuestionId: req.query.question, reviewerId: req.query.reviewer }) }));
+app.get('/v1/reviews/consensus', (_req, res) => res.json({ items: store.consensus() }));
 app.get('/v1/reviews/:id/history', (req, res) => res.json({ items: store.reviewHistory(req.params.id) }));
 app.get('/v1/reviews/:id', (req, res) => {
   const items = store.listQuestionReviews({ sourceQuestionId: req.params.id });

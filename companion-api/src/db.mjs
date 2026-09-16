@@ -206,7 +206,7 @@ export const store = {
 
   // ---- 逐審查人審查意見（雙審）----
   getQuestionReview(sourceQuestionId, reviewerId) {
-    const r = db.prepare('SELECT sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, updatedAt FROM question_reviews WHERE sourceQuestionId=? AND reviewerId=?').get(sourceQuestionId, reviewerId);
+    const r = db.prepare('SELECT sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, courseId, updatedAt FROM question_reviews WHERE sourceQuestionId=? AND reviewerId=?').get(sourceQuestionId, reviewerId);
     return r ? { ...r, typeMismatch: !!r.typeMismatch } : null;
   },
   listQuestionReviews({ sourceQuestionId, reviewerId } = {}) {
@@ -215,7 +215,7 @@ export const store = {
     if (sourceQuestionId) { where.push('sourceQuestionId = ?'); params.push(sourceQuestionId); }
     if (reviewerId) { where.push('reviewerId = ?'); params.push(reviewerId); }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    return db.prepare(`SELECT sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, updatedAt
+    return db.prepare(`SELECT sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, courseId, updatedAt
                        FROM question_reviews ${clause} ORDER BY updatedAt DESC`)
       .all(...params).map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
   },
@@ -272,6 +272,23 @@ export const store = {
     return Object.values(map);
   },
 
+  // 共識聚合（供主編分流與 AI 優化）：每題的雙審結果
+  consensus() {
+    const rows = db.prepare(`SELECT q.sourceQuestionId, q.courseId, q.reviewerId, r.name AS reviewerName, q.status, q.type, q.typeMismatch, q.note
+                             FROM question_reviews q LEFT JOIN reviewers r ON r.id = q.reviewerId ORDER BY q.sourceQuestionId`).all();
+    const map = {};
+    for (const r of rows) {
+      const c = (map[r.sourceQuestionId] = map[r.sourceQuestionId] || { sourceQuestionId: r.sourceQuestionId, courseId: r.courseId, reviews: [] });
+      c.reviews.push({ reviewerId: r.reviewerId, reviewerName: r.reviewerName, status: r.status, type: r.type, typeMismatch: !!r.typeMismatch, note: r.note });
+    }
+    return Object.values(map).map((c) => {
+      const statuses = [...new Set(c.reviews.map((x) => x.status || 'pending'))];
+      const consensus = c.reviews.length >= 2 && statuses.length === 1;
+      const typeMismatch = c.reviews.some((x) => x.typeMismatch);
+      return { ...c, reviewCount: c.reviews.length, statuses, consensus, typeMismatch, needsAttention: !consensus || typeMismatch };
+    });
+  },
+
   // 老師改選的題型（供活動組裝覆寫）
   typeOverrides() {
     const rows = db.prepare("SELECT sourceQuestionId, type FROM question_reviews WHERE type IS NOT NULL AND type <> '' ORDER BY updatedAt DESC").all();
@@ -281,7 +298,7 @@ export const store = {
   },
   // 給 AI 後續優化：結構化匯出（含審查人、意見、建議題型）
   exportReviews() {
-    return db.prepare(`SELECT q.sourceQuestionId, q.reviewerId, r.name AS reviewerName, q.nodeId, q.status, q.note, q.type, q.typeMismatch, q.updatedAt
+    return db.prepare(`SELECT q.sourceQuestionId, q.reviewerId, r.name AS reviewerName, q.courseId, q.nodeId, q.status, q.note, q.type, q.typeMismatch, q.updatedAt
                        FROM question_reviews q LEFT JOIN reviewers r ON r.id = q.reviewerId
                        ORDER BY q.sourceQuestionId`).all().map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
   },

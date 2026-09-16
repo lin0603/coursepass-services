@@ -37,6 +37,12 @@ docker build -t question-preview .   # 本機預覽（不帶資料）
 - `figure_quality.py`（workdir）對每張題目原圖做低成本健檢（HTTP/型別/檔案過小/尺寸/幾乎全白），
   並合併連連看品質閘；輸出上傳為 `preview/figure-quality.json`，站上以「品質需檢查」徽章與篩選呈現。
 
+## 老師資料保存與優化
+- **保存**：老師的審查（逐審查人 status/note/type/typeMismatch）、指派、審查歷史、AI 解題、改選題型全部寫入 companion-api 的 SQLite；DB 位於 vc66 持久化 volume（`/home/lin/coursepass/companion-data`），並有每日備份 cron。
+- **讀取**：`GET /v1/reviews`（含 `courseId`）、`/v1/reviews/:id/history`、`/v1/assignments`、`/v1/course-progress`。
+- **給 AI 優化**：`GET /v1/reviews/export?format=csv`（結構化：題號、審查人、狀態、註解、建議題型、課程）＋ `GET /v1/reviews/consensus`（雙審共識／分歧／題型不適合彙總），可餵給 AI 重寫或再生成題目。
+- **回饋出題**：老師改選的題型會經 `toActivity({ typeOverrides })` 覆寫活動組裝（App 呈現會跟著變）。
+
 ## 正式化（待辦／已做）
 - ✅ **備份**：vc66 cron（每日 03:05）以 sqlite backup API 快照到 `/home/lin/coursepass/companion-backups/`，保留 30 份。
   還原：`cp companion-YYYYMMDD-HHMM.sqlite /home/lin/coursepass/companion-data/companion.sqlite && docker restart <companion容器>`。
