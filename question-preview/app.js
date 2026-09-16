@@ -830,6 +830,16 @@ el.assignPanel.addEventListener('click', (e) => {
   if (e.target.id === 'asgExport') exportCsv();
 });
 
+// ---- 使用說明 ----
+const helpBtn = document.getElementById('helpBtn');
+const helpModal = document.getElementById('helpModal');
+const helpClose = document.getElementById('helpClose');
+function showHelp(show) { if (helpModal) helpModal.hidden = !show; }
+if (helpBtn) helpBtn.addEventListener('click', () => showHelp(true));
+if (helpClose) helpClose.addEventListener('click', () => showHelp(false));
+if (helpModal) helpModal.addEventListener('click', (e) => { if (e.target === helpModal) showHelp(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && helpModal && !helpModal.hidden) showHelp(false); });
+
 // ---- 簡易登入（通行碼）----
 const loggedIn = () => localStorage.getItem('cp_pass') === '1';
 const isAdmin = () => localStorage.getItem('cp_admin') === '1';
