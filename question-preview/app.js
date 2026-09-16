@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, explanations: {}, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   search: document.getElementById('search'),
@@ -31,7 +31,23 @@ function optionsOf(it) {
   if (it.type === 'true_false') return ['正確', '錯誤'];
   return (it.options || []).map((o) => (typeof o === 'object' ? o.content : o)).filter(Boolean);
 }
-function reviewOf(id) { return state.reviews[id] || { status: '', note: '' }; }
+function reviewOf(id) { return state.reviews[id] || { status: '', note: '', type: '' }; }
+
+// 可選題型（活動層）與「建議題型」
+const TYPES = [['choice', '點選'], ['fill_blank', '填空'], ['word_order', '排序'], ['matching', '連連看'], ['listening', '聽力']];
+const TYPE_FROM_BANK = { matching: 'matching', choice: 'choice', multiple_choice: 'choice', true_false: 'choice', fill_blank: 'fill_blank', short_answer: 'fill_blank', word_order: 'word_order', listening: 'listening' };
+function suggestedTypeOf(it) {
+  const a = state.appdata[it.id];
+  if (a) {
+    if (a.type === 'matching') return 'matching';
+    if (a.type === 'listening') return 'listening';
+    if (a.type === 'word_order') return 'word_order';
+    if (a.mode === 'choice' || a.type === 'choice' || a.type === 'multiple_choice' || a.type === 'true_false') return 'choice';
+    if (a.type === 'fill_blank' || a.type === 'short_answer') return 'fill_blank';
+  }
+  return TYPE_FROM_BANK[it.type] || 'choice';
+}
+function typeLabel(t) { const f = TYPES.find((x) => x[0] === t); return f ? f[1] : t; }
 
 // 以 CSS 從原圖裁切出元件（box = [ymin,xmin,ymax,xmax], 0–1000）
 function cropBg(img, box) {
@@ -232,13 +248,34 @@ function appViewHtml(it) {
 
 function reviewHtml(it) {
   const r = reviewOf(it.id);
-  const opts = ['', 'approved', 'adjust', 'rejected'].map((s) => `<option value="${s}"${r.status === s ? ' selected' : ''}>${REVIEW_LABELS[s]}</option>`).join('');
-  return `<section class="review" data-id="${esc(it.id)}">
-    <div class="rv-row"><label>審查</label><select class="rv-status">${opts}</select>
-      <button type="button" class="rv-save">儲存</button>
+  const statusBtns = ['approved', 'adjust', 'rejected'].map((s) => `<button type="button" class="rv-btn rv-status-btn${r.status === s ? ' on' : ''}" data-status="${s}">${REVIEW_LABELS[s]}</button>`).join('');
+  const suggested = suggestedTypeOf(it);
+  const chosen = r.type || suggested;
+  const typeBtns = TYPES.map(([t, label]) => {
+    const on = t === chosen;
+    const sug = t === suggested;
+    return `<button type="button" class="rv-btn rv-type${on ? ' on' : ''}${sug ? ' sug' : ''}" data-type="${t}"${on ? ' disabled' : ''}>${label}${sug ? ' ★' : ''}</button>`;
+  }).join('');
+  return `<section class="review" data-id="${esc(it.id)}" data-type="${esc(chosen)}">
+    <div class="rv-row"><label>審查</label>${statusBtns}
       <button type="button" class="rv-clear">清除</button>
       <span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
+    <div class="rv-row"><label>題型</label>${typeBtns}<span class="rv-hint">★ 建議題型</span></div>
     <textarea class="rv-note" rows="2" placeholder="調整註解／原因（會存到雲端）">${esc(r.note || '')}</textarea>
+  </section>`;
+}
+
+function aiHtml(it) {
+  const ex = state.explanations[it.id];
+  const out = ex ? esc(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解題（可先按「產生解題」）</span>';
+  return `<section class="ai" data-id="${esc(it.id)}">
+    <div class="ai-head">用 Gemini AI 解題 <span class="ai-tag">需淺顯易懂</span></div>
+    <div class="ai-actions">
+      <button type="button" class="ai-gen">${ex ? '重新產生' : '產生解題'}</button>
+      <button type="button" class="ai-copy">複製提示詞</button>
+      <span class="ai-state">${ex ? '已生成' : ''}</span>
+    </div>
+    <div class="ai-out">${out}</div>
   </section>`;
 }
 
@@ -292,6 +329,9 @@ function render() {
           ${appViewHtml(it)}
           ${reviewHtml(it)}
         </div>
+        <div class="col-ai">
+          ${aiHtml(it)}
+        </div>
       </div>`;
     frag.appendChild(card);
   }
@@ -311,14 +351,35 @@ function fill(sel, values, label) {
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
-async function saveReview(id, nodeId, status, note) {
+async function saveReview(id, nodeId, status, note, type) {
   const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-    body: JSON.stringify({ status, note, nodeId }),
+    body: JSON.stringify({ status, note, type, nodeId }),
   });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
+}
+
+function stripHtml(s) { return String(s ?? '').replace(/<[^>]+>/g, ''); }
+function promptFor(it) {
+  const opts = optionsOf(it);
+  const lines = ['請用淺顯易懂的方式解這道國小數學題，最後給出答案。', '', `題目：${stripHtml(it.prompt)}`];
+  if (opts.length) lines.push(`選項：${opts.map((o, i) => `${LETTERS[i]}. ${o}`).join(' / ')}`);
+  if (it.answer) lines.push(`答案：${deFull(it.answer)}`);
+  return lines.join('\n');
+}
+async function explainQuestion(it) {
+  const a = state.appdata[it.id] || {};
+  const res = await fetch(`${EXPLAIN_API}/v1/explain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+    body: JSON.stringify({ id: it.id, prompt: stripHtml(it.prompt), answer: deFull(it.answer), type: a.type || it.type, options: optionsOf(it) }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const d = await res.json();
+  if (!d.explanation) throw new Error('empty');
+  return d.explanation;
 }
 
 el.list.addEventListener('click', async (event) => {
@@ -360,38 +421,87 @@ el.list.addEventListener('click', async (event) => {
     render();
     return;
   }
-  const saveBtn = event.target.closest('.rv-save');
+  const aiGen = event.target.closest('.ai-gen');
+  const aiCopy = event.target.closest('.ai-copy');
+  if (aiGen || aiCopy) {
+    const section = (aiGen || aiCopy).closest('.ai');
+    const id = section.dataset.id;
+    const item = state.items.find((i) => i.id === id);
+    const stateEl = section.querySelector('.ai-state');
+    if (aiCopy) {
+      try { await navigator.clipboard.writeText(promptFor(item)); stateEl.textContent = '已複製提示詞'; }
+      catch { stateEl.textContent = '複製失敗（請手動）'; }
+      return;
+    }
+    stateEl.textContent = '產生中…'; aiGen.disabled = true;
+    try {
+      const ex = await explainQuestion(item);
+      state.explanations[id] = ex;
+      stateEl.textContent = '已生成';
+      section.querySelector('.ai-out').innerHTML = esc(ex).replace(/\n/g, '<br>');
+      aiGen.textContent = '重新產生';
+    } catch (e) { stateEl.textContent = '失敗：' + e.message; }
+    finally { aiGen.disabled = false; }
+    return;
+  }
+  const statusBtn = event.target.closest('.rv-status-btn');
+  const typeBtn = event.target.closest('.rv-type');
   const clearBtn = event.target.closest('.rv-clear');
-  if (!saveBtn && !clearBtn) return;
-  const section = (saveBtn || clearBtn).closest('.review');
+  if (!statusBtn && !typeBtn && !clearBtn) return;
+  const section = (statusBtn || typeBtn || clearBtn).closest('.review');
   const id = section.dataset.id;
   const item = state.items.find((i) => i.id === id);
   const stateEl = section.querySelector('.rv-state');
   const badge = section.closest('.card').querySelector('.badge.rv');
+  const note = section.querySelector('.rv-note').value;
+  const syncButtons = (chosen) => {
+    section.querySelectorAll('.rv-type').forEach((b) => { const on = b.dataset.type === chosen; b.classList.toggle('on', on); b.disabled = on; });
+  };
   try {
     if (clearBtn) {
       stateEl.textContent = '清除中…';
       const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
       if (!res.ok && res.status !== 404) throw new Error(`${res.status}`);
       delete state.reviews[id];
-      section.querySelector('.rv-status').value = '';
       section.querySelector('.rv-note').value = '';
+      section.querySelectorAll('.rv-status-btn').forEach((b) => b.classList.remove('on'));
+      section.dataset.type = suggestedTypeOf(item); syncButtons(section.dataset.type);
       badge.textContent = REVIEW_LABELS[''];
       badge.className = 'badge rv rv-none';
       stateEl.textContent = '已清除';
       return;
     }
-    const status = section.querySelector('.rv-status').value;
-    const note = section.querySelector('.rv-note').value;
-    saveBtn.disabled = true; stateEl.textContent = '儲存中…';
-    const saved = await saveReview(id, item ? item.node : undefined, status, note);
-    state.reviews[id] = { status: saved.status, note: saved.note, updatedAt: saved.updatedAt };
+    const prev = reviewOf(id);
+    const status = statusBtn ? statusBtn.dataset.status : (prev.status || '');
+    const type = typeBtn ? typeBtn.dataset.type : (prev.type || section.dataset.type || '');
+    stateEl.textContent = '儲存中…';
+    const saved = await saveReview(id, item ? item.node : undefined, status, note, type);
+    state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, updatedAt: saved.updatedAt };
+    section.dataset.type = saved.type || type;
+    section.querySelectorAll('.rv-status-btn').forEach((b) => b.classList.toggle('on', b.dataset.status === saved.status));
+    syncButtons(section.dataset.type);
     stateEl.textContent = '已儲存 ✓';
     badge.textContent = REVIEW_LABELS[saved.status || ''];
     badge.className = `badge rv rv-${saved.status || 'none'}`;
   } catch (e) {
     stateEl.textContent = '失敗：' + e.message;
-  } finally { if (saveBtn) saveBtn.disabled = false; }
+  }
+});
+
+el.list.addEventListener('focusout', async (event) => {
+  const note = event.target.closest('.rv-note');
+  if (!note) return;
+  const section = note.closest('.review');
+  const id = section.dataset.id;
+  const item = state.items.find((i) => i.id === id);
+  const cur = reviewOf(id);
+  if (note.value === (cur.note || '')) return;
+  const stateEl = section.querySelector('.rv-state');
+  try {
+    const saved = await saveReview(id, item ? item.node : undefined, cur.status || '', note.value, cur.type || section.dataset.type || '');
+    state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, updatedAt: saved.updatedAt };
+    stateEl.textContent = '已儲存 ✓';
+  } catch (e) { stateEl.textContent = '失敗：' + e.message; }
 });
 
 const params = new URLSearchParams(location.search);
@@ -400,21 +510,27 @@ const metaApp = document.querySelector('meta[name="preview-appdata"]');
 const metaMatch = document.querySelector('meta[name="preview-matching"]');
 const metaApi = document.querySelector('meta[name="reviews-api"]');
 const metaToken = document.querySelector('meta[name="reviews-token"]');
+const metaExplain = document.querySelector('meta[name="explain-api"]');
+const metaExplanations = document.querySelector('meta[name="preview-explanations"]');
 const DATA_URL = params.get('data') || (metaData && metaData.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5.json';
 const APP_DATA_URL = params.get('appdata') || (metaApp && metaApp.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5-appdata.json';
 const MATCHING_URL = params.get('matching') || (metaMatch && metaMatch.content) || 'https://resource-files-dev.starxinteractive.com/preview/matching-pairs.json';
 const REVIEWS_API = params.get('api') || (metaApi && metaApi.content) || 'https://companion-api-dev.starxinteractive.com';
 const REVIEWS_TOKEN = params.get('token') || (metaToken && metaToken.content) || 'cp-dev-token-change-me';
+const EXPLAIN_API = params.get('explain') || (metaExplain && metaExplain.content) || REVIEWS_API;
+const EXPLANATIONS_URL = params.get('explanations') || (metaExplanations && metaExplanations.content) || '';
 
 Promise.all([
   fetch(DATA_URL).then((r) => r.json()),
   fetch(APP_DATA_URL).then((r) => r.json()).catch(() => ({ items: {} })),
   fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
   fetch(`${REVIEWS_API}/v1/reviews`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
-]).then(([d, app, match, rev]) => {
+  EXPLANATIONS_URL ? fetch(EXPLANATIONS_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
+]).then(([d, app, match, rev, expl]) => {
   state.items = d.items;
   state.appdata = app.items || {};
   state.matching = match.items || {};
+  state.explanations = expl.items || {};
   for (const r of (rev.items || [])) state.reviews[r.sourceQuestionId] = r;
   const units = [...new Set(state.items.map((i) => i.unit).filter(Boolean))];
   const unitNo = (u) => Math.min(...state.items.filter((i) => i.unit === u).map((i) => parseInt(i.section, 10) || 99));

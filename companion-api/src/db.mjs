@@ -25,6 +25,10 @@ CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWron
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
 `);
 
+// 舊資料庫補欄位：reviews.type（老師選定的題型）
+const reviewCols = db.prepare('PRAGMA table_info(reviews)').all().map((c) => c.name);
+if (!reviewCols.includes('type')) db.exec('ALTER TABLE reviews ADD COLUMN type TEXT');
+
 const now = () => new Date().toISOString();
 
 export const store = {
@@ -63,7 +67,7 @@ export const store = {
     return db.prepare('SELECT sourceQuestionId, nodeId, wrongCount, lastWrongAt FROM wrongbook WHERE learnerId=? ORDER BY lastWrongAt DESC').all(learnerId);
   },
   getReview(sourceQuestionId) {
-    return db.prepare('SELECT sourceQuestionId, nodeId, status, note, reviewer, updatedAt FROM reviews WHERE sourceQuestionId=?').get(sourceQuestionId) || null;
+    return db.prepare('SELECT sourceQuestionId, nodeId, status, note, type, reviewer, updatedAt FROM reviews WHERE sourceQuestionId=?').get(sourceQuestionId) || null;
   },
   listReviews({ node, status } = {}) {
     const where = [];
@@ -71,21 +75,22 @@ export const store = {
     if (node) { where.push('nodeId = ?'); params.push(node); }
     if (status) { where.push('status = ?'); params.push(status); }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    return db.prepare(`SELECT sourceQuestionId, nodeId, status, note, reviewer, updatedAt FROM reviews ${clause} ORDER BY updatedAt DESC`).all(...params);
+    return db.prepare(`SELECT sourceQuestionId, nodeId, status, note, type, reviewer, updatedAt FROM reviews ${clause} ORDER BY updatedAt DESC`).all(...params);
   },
-  upsertReview({ sourceQuestionId, nodeId, status, note, reviewer }) {
+  upsertReview({ sourceQuestionId, nodeId, status, note, type, reviewer }) {
     const existing = this.getReview(sourceQuestionId);
     const row = {
       sourceQuestionId,
       nodeId: nodeId ?? (existing ? existing.nodeId : null),
       status: status ?? (existing ? existing.status : 'pending'),
       note: note ?? (existing ? existing.note : ''),
+      type: type ?? (existing ? existing.type : null),
       reviewer: reviewer ?? (existing ? existing.reviewer : null),
       updatedAt: now(),
     };
-    db.prepare(`INSERT INTO reviews (sourceQuestionId,nodeId,status,note,reviewer,updatedAt) VALUES (?,?,?,?,?,?)
-                ON CONFLICT(sourceQuestionId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, reviewer=excluded.reviewer, updatedAt=excluded.updatedAt`)
-      .run(row.sourceQuestionId, row.nodeId, row.status, row.note, row.reviewer, row.updatedAt);
+    db.prepare(`INSERT INTO reviews (sourceQuestionId,nodeId,status,note,type,reviewer,updatedAt) VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, reviewer=excluded.reviewer, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.nodeId, row.status, row.note, row.type, row.reviewer, row.updatedAt);
     return row;
   },
   deleteReview(sourceQuestionId) {

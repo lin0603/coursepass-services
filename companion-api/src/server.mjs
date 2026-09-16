@@ -8,6 +8,7 @@ import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
+import { explainQuestion } from './explain.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -155,10 +156,26 @@ app.post('/v1/learners/:learnerId/answers', asyncHandler(async (req, res) => {
   res.json(store.recordAnswer({ learnerId: req.params.learnerId, ...parsed.data }));
 }));
 
+// --- AI 解題（Gemini 代理；金鑰只在後端）---
+const explainSchema = z.object({
+  id: z.string().max(64).optional(),
+  prompt: z.string().max(4000).optional(),
+  answer: z.string().max(2000).optional(),
+  type: z.string().max(64).optional(),
+  options: z.array(z.string().max(500)).max(8).optional(),
+});
+
+app.post('/v1/explain', asyncHandler(async (req, res) => {
+  const parsed = explainSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  res.json(await explainQuestion(parsed.data));
+}));
+
 // --- Question review / comments (persisted) ---
 const reviewSchema = z.object({
   status: z.enum(['pending', 'approved', 'adjust', 'rejected']).optional(),
   note: z.string().max(2000).optional(),
+  type: z.string().max(32).optional(),
   nodeId: z.string().max(64).optional(),
   reviewer: z.string().max(80).optional(),
 });

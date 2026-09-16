@@ -12,5 +12,9 @@ export const config = {
 // LLM 誘答變體（離線生成、放 resource-files）。
 config.llmVariantsUrl = process.env.LLM_VARIANTS_URL || `${config.filesBase}/preview/llm-variants.json`;
 
+// Gemini（解題用；金鑰只在後端）。預設最新最便宜的 flash-lite。
+config.geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY || '';
+config.geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+
 fs.mkdirSync(config.dataDir, { recursive: true });
 export const dbPath = path.join(config.dataDir, 'companion.sqlite');
