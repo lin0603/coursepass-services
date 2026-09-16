@@ -144,10 +144,13 @@ function matchingView(it) {
   let inner, help;
   if (layout === 'lr') {
     // 左右兩欄：欄寬依原圖像素寬等比例，節點寬度用同一 scale
-    const maxA = Math.max(1, ...aIdx.map(pw));
-    const maxB = Math.max(1, ...bIdx.map(pw));
-    const nodeA = aIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'left', play, allFigure(aIdx) ? pw(i) / maxA * 100 : null)).join('');
-    const nodeB = bIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'right', play, allFigure(bIdx) ? pw(i) / maxB * 100 : null)).join('');
+    const figA = aIdx.filter((i) => kindOf(m.boxes[i]) === 'figure');
+    const figB = bIdx.filter((i) => kindOf(m.boxes[i]) === 'figure');
+    const maxA = Math.max(1, ...figA.map(pw));
+    const maxB = Math.max(1, ...figB.map(pw));
+    const pctFor = (i, max) => (kindOf(m.boxes[i]) === 'figure' ? pw(i) / max * 100 : null);
+    const nodeA = aIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'left', play, pctFor(i, maxA))).join('');
+    const nodeB = bIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'right', play, pctFor(i, maxB))).join('');
     inner = `<div class="app-match-board app-match-html app-match-lr" data-match-id="${esc(it.id)}">
       <div class="match-col match-left" style="flex:${maxA.toFixed(2)} 1 0">${nodeA}</div>
       <div class="match-col match-right" style="flex:${maxB.toFixed(2)} 1 0">${nodeB}</div>
