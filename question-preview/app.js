@@ -358,10 +358,12 @@ function fill(sel, values, label) {
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 async function saveReview(id, nodeId, status, note, type, typeMismatch) {
+  const payload = { note, nodeId, type: type || '', typeMismatch: !!typeMismatch };
+  if (status) payload.status = status; // 空字串會被後端視為非法 enum，省略
   const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-    body: JSON.stringify({ status, note, type, typeMismatch, nodeId }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();

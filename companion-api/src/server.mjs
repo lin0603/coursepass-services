@@ -196,7 +196,9 @@ app.get('/v1/reviews/:id', (req, res) => {
   res.json(review);
 });
 app.put('/v1/reviews/:id', (req, res) => {
-  const parsed = reviewSchema.safeParse(req.body || {});
+  const body = { ...(req.body || {}) };
+  if (body.status === '') delete body.status; // 空字串視為未設定
+  const parsed = reviewSchema.safeParse(body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
   res.json(store.upsertReview({ sourceQuestionId: req.params.id, ...parsed.data }));
 });
