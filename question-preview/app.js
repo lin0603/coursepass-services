@@ -495,7 +495,11 @@ el.list.addEventListener('click', async (event) => {
     const status = statusBtn ? statusBtn.dataset.status : (prev.status || '');
     let type = typeBtn ? typeBtn.dataset.type : (prev.type || '');
     let typeMismatch = prev.typeMismatch;
-    if (mismatchBtn) { typeMismatch = !prev.typeMismatch; if (!typeMismatch) type = ''; }
+    if (mismatchBtn) {
+      typeMismatch = !prev.typeMismatch;
+      if (!typeMismatch) type = '';
+      setMismatch(typeMismatch, type); syncType(type); // 先即時反應，再存
+    }
     stateEl.textContent = '儲存中…';
     const saved = await saveReview(id, item ? item.node : undefined, status, note, type, typeMismatch);
     state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, typeMismatch: saved.typeMismatch, updatedAt: saved.updatedAt };
