@@ -25,6 +25,13 @@ app.use((req, res, next) => {
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+// 審題站簡易登入：驗通行碼（未設 PREVIEW_PASSCODE 則不啟用）
+app.get('/v1/login', (_req, res) => res.json({ gate: Boolean(config.previewPasscode) }));
+app.post('/v1/login', (req, res) => {
+  const expected = config.previewPasscode;
+  if (!expected) return res.json({ ok: true, gate: false });
+  res.json({ ok: String((req.body || {}).code || '') === expected, gate: true });
+});
 app.get('/version', asyncHandler(async (_req, res) => {
   res.json({ service: 'companion-api', version: '1.0.0', knowledge: await knowledge.version() });
 }));

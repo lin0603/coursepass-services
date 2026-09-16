@@ -16,5 +16,8 @@ config.llmVariantsUrl = process.env.LLM_VARIANTS_URL || `${config.filesBase}/pre
 config.geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY || '';
 config.geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
+// 審題站簡易登入（通行碼）；未設＝不啟用
+config.previewPasscode = process.env.PREVIEW_PASSCODE || '';
+
 fs.mkdirSync(config.dataDir, { recursive: true });
 export const dbPath = path.join(config.dataDir, 'companion.sqlite');

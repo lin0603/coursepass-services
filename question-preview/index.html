@@ -12,9 +12,18 @@
 <meta name="preview-explanations" content="https://resource-files-dev.starxinteractive.com/preview/explanations.json">
 <meta name="preview-quality" content="https://resource-files-dev.starxinteractive.com/preview/figure-quality.json">
 <title>康軒 數學 五年級 題目預覽</title>
-<link rel="stylesheet" href="./styles.css?v=20260916p">
+<link rel="stylesheet" href="./styles.css?v=20260916q">
 </head>
 <body>
+<div id="loginGate" class="login-gate" hidden>
+  <div class="login-card">
+    <h2>題目審查站</h2>
+    <p>請輸入通行碼後，選擇你的名字</p>
+    <input id="loginCode" type="password" placeholder="通行碼" autocomplete="current-password">
+    <button id="loginBtn" type="button">登入</button>
+    <p id="loginMsg" class="login-msg"></p>
+  </div>
+</div>
 <header class="topbar">
   <div class="brand"><span class="dot"></span><div><h1>康軒 115 上 · 數學 · 五年級</h1><p id="subtitle">載入中…</p></div></div>
   <input id="search" type="search" placeholder="搜尋題目 / 題號 / 課次">
@@ -36,12 +45,13 @@
   <span class="mode-label">審查人</span>
   <select id="meSelect" class="me-select"></select>
   <button id="addReviewer" class="mini-btn" type="button">＋新增</button>
+  <button id="logoutBtn" class="mini-btn" type="button">登出</button>
   <button id="assignToggle" class="mini-btn" type="button">審查分配</button>
   <label class="chk"><input id="mineOnly" type="checkbox"> 只看我的待審</label>
 </div>
 <div id="assignPanel" class="assign-panel" hidden></div>
 <main id="list" class="list"></main>
 <div id="more" class="more"></div>
-<script src="./app.js?v=20260916p"></script>
+<script src="./app.js?v=20260916q"></script>
 </body>
 </html>

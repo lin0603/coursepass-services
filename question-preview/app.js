@@ -15,6 +15,11 @@ const el = {
   assignToggle: document.getElementById('assignToggle'),
   assignPanel: document.getElementById('assignPanel'),
   mineOnly: document.getElementById('mineOnly'),
+  loginGate: document.getElementById('loginGate'),
+  loginCode: document.getElementById('loginCode'),
+  loginBtn: document.getElementById('loginBtn'),
+  loginMsg: document.getElementById('loginMsg'),
+  logoutBtn: document.getElementById('logoutBtn'),
   list: document.getElementById('list'),
   more: document.getElementById('more'),
 };
@@ -773,6 +778,26 @@ el.assignPanel.addEventListener('click', (e) => {
   if (e.target.id === 'asgExport') exportCsv();
 });
 
+// ---- 簡易登入（通行碼）----
+const loggedIn = () => localStorage.getItem('cp_pass') === '1';
+function showGate(show) { if (el.loginGate) el.loginGate.hidden = !show; }
+async function doLogin() {
+  el.loginMsg.textContent = '登入中…';
+  try {
+    const res = await fetch(`${EXPLAIN_API}/v1/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+      body: JSON.stringify({ code: el.loginCode.value }),
+    });
+    const d = await res.json();
+    if (d.ok) { localStorage.setItem('cp_pass', '1'); showGate(false); el.loginMsg.textContent = ''; if (!state.me) el.meSelect.focus(); }
+    else el.loginMsg.textContent = '通行碼錯誤';
+  } catch (e) { el.loginMsg.textContent = '登入失敗：' + e.message; }
+}
+if (el.loginBtn) el.loginBtn.addEventListener('click', doLogin);
+if (el.loginCode) el.loginCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+if (el.logoutBtn) el.logoutBtn.addEventListener('click', () => { localStorage.removeItem('cp_pass'); location.reload(); });
+
 const params = new URLSearchParams(location.search);
 const metaData = document.querySelector('meta[name="preview-data"]');
 const metaApp = document.querySelector('meta[name="preview-appdata"]');
@@ -801,7 +826,7 @@ Promise.all([
   fetch(`${REVIEWS_API}/v1/reviewers`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
   fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
   QUALITY_URL ? fetch(QUALITY_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
-]).then(([d, app, match, rev, expl, explApi, rvs, asg, qual]) => {
+]).then(async ([d, app, match, rev, expl, explApi, rvs, asg, qual]) => {
   state.items = d.items;
   state.appdata = app.items || {};
   state.matching = match.items || {};
@@ -834,4 +859,8 @@ Promise.all([
     render();
   }));
   render();
+  try {
+    const lg = await (await fetch(`${EXPLAIN_API}/v1/login`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
+    if (lg.gate && !loggedIn()) showGate(true);
+  } catch { /* API 掛掉時不擋 */ }
 }).catch((e) => { el.subtitle.textContent = '載入失敗：' + e.message; });
