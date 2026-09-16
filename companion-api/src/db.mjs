@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS wrongbook (
 CREATE TABLE IF NOT EXISTS reviews (
   sourceQuestionId TEXT PRIMARY KEY, nodeId TEXT, status TEXT, note TEXT, reviewer TEXT, updatedAt TEXT
 );
+CREATE TABLE IF NOT EXISTS explanations (
+  sourceQuestionId TEXT PRIMARY KEY, model TEXT, explanation TEXT, updatedAt TEXT
+);
 CREATE INDEX IF NOT EXISTS ix_answers_learner ON answers(learnerId, createdAt);
 CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWrongAt);
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
@@ -95,5 +98,18 @@ export const store = {
   },
   deleteReview(sourceQuestionId) {
     return db.prepare('DELETE FROM reviews WHERE sourceQuestionId=?').run(sourceQuestionId).changes > 0;
+  },
+  getExplanation(sourceQuestionId) {
+    return db.prepare('SELECT sourceQuestionId, model, explanation, updatedAt FROM explanations WHERE sourceQuestionId=?').get(sourceQuestionId) || null;
+  },
+  listExplanations() {
+    return db.prepare('SELECT sourceQuestionId, model, explanation, updatedAt FROM explanations ORDER BY updatedAt').all();
+  },
+  upsertExplanation({ sourceQuestionId, model, explanation }) {
+    const row = { sourceQuestionId, model: model || null, explanation: explanation || '', updatedAt: now() };
+    db.prepare(`INSERT INTO explanations (sourceQuestionId,model,explanation,updatedAt) VALUES (?,?,?,?)
+                ON CONFLICT(sourceQuestionId) DO UPDATE SET model=excluded.model, explanation=excluded.explanation, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.model, row.explanation, row.updatedAt);
+    return row;
   },
 };

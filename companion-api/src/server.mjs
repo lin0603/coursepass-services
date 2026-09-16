@@ -171,6 +171,14 @@ app.post('/v1/explain', asyncHandler(async (req, res) => {
   res.json(await explainQuestion(parsed.data));
 }));
 
+// 已解題過的清單（前端載入後就不必再按「產生解題」）
+app.get('/v1/explanations', (_req, res) => {
+  const items = {};
+  const models = {};
+  for (const r of store.listExplanations()) { items[r.sourceQuestionId] = r.explanation; models[r.sourceQuestionId] = r.model; }
+  res.json({ items, models });
+});
+
 // --- Question review / comments (persisted) ---
 const reviewSchema = z.object({
   status: z.enum(['pending', 'approved', 'adjust', 'rejected']).optional(),

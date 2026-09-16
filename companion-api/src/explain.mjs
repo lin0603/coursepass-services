@@ -1,4 +1,5 @@
 import { config } from './config.mjs';
+import { store } from './db.mjs';
 
 // 淺顯易懂的解題（Gemini）。金鑰只存在後端；前端呼叫 /v1/explain 代理。
 const SYSTEM_PROMPT = [
@@ -22,6 +23,12 @@ function buildUserText({ prompt, answer, type, options }) {
 
 export async function explainQuestion(input = {}) {
   if (!config.geminiApiKey) throw new Error('gemini key not configured (set GEMINI_API_KEY)');
+  const id = input.id;
+  // 已解題過就沿用，不再呼叫 Gemini（避免浪費 token）
+  if (id) {
+    const row = store.getExplanation(id);
+    if (row && row.explanation) return { model: row.model || config.geminiModel, cached: true, explanation: row.explanation };
+  }
   const text = buildUserText(input);
   const key = `${config.geminiModel}\u0000${text}`;
   if (cache.has(key)) return { model: config.geminiModel, cached: true, explanation: cache.get(key) };
@@ -42,5 +49,6 @@ export async function explainQuestion(input = {}) {
   const data = await res.json();
   const explanation = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
   cache.set(key, explanation);
+  if (id) store.upsertExplanation({ sourceQuestionId: id, model: config.geminiModel, explanation });
   return { model: config.geminiModel, cached: false, explanation };
 }

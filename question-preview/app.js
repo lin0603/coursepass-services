@@ -268,12 +268,12 @@ function reviewHtml(it) {
 function aiHtml(it) {
   const ex = state.explanations[it.id];
   const out = ex ? esc(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解題（可先按「產生解題」）</span>';
+  const genBtn = ex ? '' : '<button type="button" class="ai-gen">產生解題</button>';
   return `<section class="ai" data-id="${esc(it.id)}">
     <div class="ai-head">用 Gemini AI 解題 <span class="ai-tag">需淺顯易懂</span></div>
-    <div class="ai-actions">
-      <button type="button" class="ai-gen">${ex ? '重新產生' : '產生解題'}</button>
+    <div class="ai-actions">${genBtn}
       <button type="button" class="ai-copy">複製提示詞</button>
-      <span class="ai-state">${ex ? '已生成' : ''}</span>
+      <span class="ai-state">${ex ? '已解題（保留，無需再按）' : ''}</span>
     </div>
     <div class="ai-out">${out}</div>
   </section>`;
@@ -437,11 +437,10 @@ el.list.addEventListener('click', async (event) => {
     try {
       const ex = await explainQuestion(item);
       state.explanations[id] = ex;
-      stateEl.textContent = '已生成';
+      stateEl.textContent = '已解題（保留，無需再按）';
       section.querySelector('.ai-out').innerHTML = esc(ex).replace(/\n/g, '<br>');
-      aiGen.textContent = '重新產生';
-    } catch (e) { stateEl.textContent = '失敗：' + e.message; }
-    finally { aiGen.disabled = false; }
+      aiGen.remove();
+    } catch (e) { stateEl.textContent = '失敗：' + e.message; aiGen.disabled = false; }
     return;
   }
   const statusBtn = event.target.closest('.rv-status-btn');
@@ -526,11 +525,12 @@ Promise.all([
   fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
   fetch(`${REVIEWS_API}/v1/reviews`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
   EXPLANATIONS_URL ? fetch(EXPLANATIONS_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
-]).then(([d, app, match, rev, expl]) => {
+  fetch(`${EXPLAIN_API}/v1/explanations`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: {} })),
+]).then(([d, app, match, rev, expl, explApi]) => {
   state.items = d.items;
   state.appdata = app.items || {};
   state.matching = match.items || {};
-  state.explanations = expl.items || {};
+  state.explanations = { ...(expl.items || {}), ...(explApi.items || {}) };
   for (const r of (rev.items || [])) state.reviews[r.sourceQuestionId] = r;
   const units = [...new Set(state.items.map((i) => i.unit).filter(Boolean))];
   const unitNo = (u) => Math.min(...state.items.filter((i) => i.unit === u).map((i) => parseInt(i.section, 10) || 99));
