@@ -52,7 +52,10 @@ async function init() {
   const totalSize = state.manifest.archives.reduce((sum, a) => sum + a.totalSize, 0);
   el.subtitle.textContent = `${state.manifest.archives.length} 個資源包 · ${totalFiles.toLocaleString()} 檔 · ${human(totalSize)}`;
   renderArchiveList();
-  const first = state.manifest.archives.find((a) => a.kind === 'iso') || state.manifest.archives[0];
+  const wanted = new URLSearchParams(location.search).get('archive');
+  const first = (wanted && state.manifest.archives.find((a) => a.slug === wanted))
+    || state.manifest.archives.find((a) => a.kind === 'iso')
+    || state.manifest.archives[0];
   if (first) selectArchive(first.slug);
 }
 

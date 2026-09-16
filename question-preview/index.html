@@ -11,8 +11,10 @@
 <meta name="explain-api" content="https://companion-api-dev.starxinteractive.com">
 <meta name="preview-explanations" content="https://resource-files-dev.starxinteractive.com/preview/explanations.json">
 <meta name="preview-quality" content="https://resource-files-dev.starxinteractive.com/preview/figure-quality.json">
+<meta name="preview-courses" content="https://resource-files-dev.starxinteractive.com/preview/courses.json">
+<meta name="resource-index" content="https://resource-index-dev.starxinteractive.com">
 <title>康軒 數學 五年級 題目預覽</title>
-<link rel="stylesheet" href="./styles.css?v=20260916q">
+<link rel="stylesheet" href="./styles.css?v=20260916r">
 </head>
 <body>
 <div id="loginGate" class="login-gate" hidden>
@@ -25,7 +27,9 @@
   </div>
 </div>
 <header class="topbar">
-  <div class="brand"><span class="dot"></span><div><h1>康軒 115 上 · 數學 · 五年級</h1><p id="subtitle">載入中…</p></div></div>
+  <div class="brand"><span class="dot"></span><div><h1 id="courseTitle">題目審查站</h1><p id="subtitle">載入中…</p></div></div>
+  <select id="courseSelect" class="me-select" title="切換課程"></select>
+  <a id="sourceLink" class="mini-btn" target="_blank" rel="noopener" hidden>來源資源包</a>
   <input id="search" type="search" placeholder="搜尋題目 / 題號 / 課次">
   <div class="mode-switch" title="切換 App 呈現展示方式">
     <span class="mode-label">App 呈現展示方式</span>
@@ -52,6 +56,6 @@
 <div id="assignPanel" class="assign-panel" hidden></div>
 <main id="list" class="list"></main>
 <div id="more" class="more"></div>
-<script src="./app.js?v=20260916q"></script>
+<script src="./app.js?v=20260916r"></script>
 </body>
 </html>

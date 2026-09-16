@@ -2,6 +2,9 @@
 const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, play: {}, appMode: 'quiz', mineOnly: false, qualityOnly: false, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
+  courseTitle: document.getElementById('courseTitle'),
+  courseSelect: document.getElementById('courseSelect'),
+  sourceLink: document.getElementById('sourceLink'),
   search: document.getElementById('search'),
   fChapter: document.getElementById('fChapter'),
   fNode: document.getElementById('fNode'),
@@ -807,60 +810,98 @@ const metaToken = document.querySelector('meta[name="reviews-token"]');
 const metaExplain = document.querySelector('meta[name="explain-api"]');
 const metaExplanations = document.querySelector('meta[name="preview-explanations"]');
 const metaQuality = document.querySelector('meta[name="preview-quality"]');
-const DATA_URL = params.get('data') || (metaData && metaData.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5.json';
-const APP_DATA_URL = params.get('appdata') || (metaApp && metaApp.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5-appdata.json';
-const MATCHING_URL = params.get('matching') || (metaMatch && metaMatch.content) || 'https://resource-files-dev.starxinteractive.com/preview/matching-pairs.json';
+const metaCourses = document.querySelector('meta[name="preview-courses"]');
+const metaIndex = document.querySelector('meta[name="resource-index"]');
 const REVIEWS_API = params.get('api') || (metaApi && metaApi.content) || 'https://companion-api-dev.starxinteractive.com';
 const REVIEWS_TOKEN = params.get('token') || (metaToken && metaToken.content) || 'cp-dev-token-change-me';
 const EXPLAIN_API = params.get('explain') || (metaExplain && metaExplain.content) || REVIEWS_API;
-const EXPLANATIONS_URL = params.get('explanations') || (metaExplanations && metaExplanations.content) || '';
-const QUALITY_URL = params.get('quality') || (metaQuality && metaQuality.content) || '';
+const COURSES_URL = params.get('courses') || (metaCourses && metaCourses.content) || '';
+const RESOURCE_INDEX = params.get('index') || (metaIndex && metaIndex.content) || 'https://resource-index-dev.starxinteractive.com';
+const FILES_BASE = 'https://resource-files-dev.starxinteractive.com/preview';
 
-Promise.all([
-  fetch(DATA_URL).then((r) => r.json()),
-  fetch(APP_DATA_URL).then((r) => r.json()).catch(() => ({ items: {} })),
-  fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
-  fetch(`${REVIEWS_API}/v1/reviews`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
-  EXPLANATIONS_URL ? fetch(EXPLANATIONS_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
-  fetch(`${EXPLAIN_API}/v1/explanations`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: {} })),
-  fetch(`${REVIEWS_API}/v1/reviewers`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
-  fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
-  QUALITY_URL ? fetch(QUALITY_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
-]).then(async ([d, app, match, rev, expl, explApi, rvs, asg, qual]) => {
-  state.items = d.items;
-  state.appdata = app.items || {};
-  state.matching = match.items || {};
-  state.explanations = { ...(expl.items || {}), ...(explApi.items || {}) };
-  state.quality = qual.items || {};
-  state.qreviews = {};
-  for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
-  state.reviewers = rvs.items || [];
-  state.assignments = {};
-  for (const a of (asg.items || [])) (state.assignments[a.sourceQuestionId] = state.assignments[a.sourceQuestionId] || []).push(a);
-  renderMeSelect();
-  const units = [...new Set(state.items.map((i) => i.unit).filter(Boolean))];
-  const unitNo = (u) => Math.min(...state.items.filter((i) => i.unit === u).map((i) => parseInt(i.section, 10) || 99));
-  units.sort((a, b) => unitNo(a) - unitNo(b));
-  fill(el.fChapter, units);
-  fill(el.fNode, [...new Set(state.items.map((i) => i.node).filter(Boolean))].sort());
-  fill(el.fType, [...new Set(state.items.map((i) => i.type).filter(Boolean))].sort());
-  fill(el.fStatus, [...new Set(state.items.map((i) => i.status).filter(Boolean))].sort());
-  el.search.addEventListener('input', debounce((e) => { state.q = e.target.value; state.limit = 100; render(); }, 150));
-  el.fChapter.addEventListener('change', (e) => { state.chapter = e.target.value; state.limit = 100; render(); });
-  el.fNode.addEventListener('change', (e) => { state.node = e.target.value; state.limit = 100; render(); });
-  el.fType.addEventListener('change', (e) => { state.type = e.target.value; state.limit = 100; render(); });
-  el.fStatus.addEventListener('change', (e) => { state.status = e.target.value; state.limit = 100; render(); });
-  el.fReview.addEventListener('change', (e) => { state.review = e.target.value; state.limit = 100; render(); });
-  el.fImage.addEventListener('change', (e) => { state.imageOnly = e.target.checked; state.limit = 100; render(); });
-  el.fQuality.addEventListener('change', (e) => { state.qualityOnly = e.target.checked; state.limit = 100; render(); });
-  document.querySelectorAll('.mode-switch .mode-btn').forEach((btn) => btn.addEventListener('click', () => {
-    state.appMode = btn.dataset.mode;
-    document.querySelectorAll('.mode-switch .mode-btn').forEach((x) => x.classList.toggle('on', x === btn));
-    render();
-  }));
-  render();
+function applyCourseMeta(course) {
+  if (!course) return;
+  if (el.courseTitle) el.courseTitle.textContent = course.name || '題目審查站';
+  document.title = `${course.name || ''} · 題目審查`;
+  if (el.sourceLink && course.archiveSlug) {
+    el.sourceLink.href = `${RESOURCE_INDEX}/?archive=${encodeURIComponent(course.archiveSlug)}`;
+    el.sourceLink.hidden = false;
+  }
+}
+function renderCourseSelector(courses, course) {
+  if (!el.courseSelect) return;
+  el.courseSelect.innerHTML = courses.map((c) => `<option value="${esc(c.courseId)}"${course && c.courseId === course.courseId ? ' selected' : ''}>${esc(c.name || c.courseId)}</option>`).join('');
+  el.courseSelect.hidden = courses.length === 0;
+}
+
+async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUALITY_URL) {
   try {
-    const lg = await (await fetch(`${EXPLAIN_API}/v1/login`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
-    if (lg.gate && !loggedIn()) showGate(true);
-  } catch { /* API 掛掉時不擋 */ }
-}).catch((e) => { el.subtitle.textContent = '載入失敗：' + e.message; });
+    const [d, app, match, rev, expl, explApi, rvs, asg, qual] = await Promise.all([
+      fetch(DATA_URL).then((r) => r.json()),
+      fetch(APP_DATA_URL).then((r) => r.json()).catch(() => ({ items: {} })),
+      fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
+      fetch(`${REVIEWS_API}/v1/reviews`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+      EXPLANATIONS_URL ? fetch(EXPLANATIONS_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
+      fetch(`${EXPLAIN_API}/v1/explanations`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: {} })),
+      fetch(`${REVIEWS_API}/v1/reviewers`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+      fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+      QUALITY_URL ? fetch(QUALITY_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
+    ]);
+    state.items = d.items;
+    state.appdata = app.items || {};
+    state.matching = match.items || {};
+    state.explanations = { ...(expl.items || {}), ...(explApi.items || {}) };
+    state.quality = qual.items || {};
+    state.qreviews = {};
+    for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
+    state.reviewers = rvs.items || [];
+    state.assignments = {};
+    for (const a of (asg.items || [])) (state.assignments[a.sourceQuestionId] = state.assignments[a.sourceQuestionId] || []).push(a);
+    renderMeSelect();
+    const units = [...new Set(state.items.map((i) => i.unit).filter(Boolean))];
+    const unitNo = (u) => Math.min(...state.items.filter((i) => i.unit === u).map((i) => parseInt(i.section, 10) || 99));
+    units.sort((a, b) => unitNo(a) - unitNo(b));
+    fill(el.fChapter, units);
+    fill(el.fNode, [...new Set(state.items.map((i) => i.node).filter(Boolean))].sort());
+    fill(el.fType, [...new Set(state.items.map((i) => i.type).filter(Boolean))].sort());
+    fill(el.fStatus, [...new Set(state.items.map((i) => i.status).filter(Boolean))].sort());
+    el.search.addEventListener('input', debounce((e) => { state.q = e.target.value; state.limit = 100; render(); }, 150));
+    el.fChapter.addEventListener('change', (e) => { state.chapter = e.target.value; state.limit = 100; render(); });
+    el.fNode.addEventListener('change', (e) => { state.node = e.target.value; state.limit = 100; render(); });
+    el.fType.addEventListener('change', (e) => { state.type = e.target.value; state.limit = 100; render(); });
+    el.fStatus.addEventListener('change', (e) => { state.status = e.target.value; state.limit = 100; render(); });
+    el.fReview.addEventListener('change', (e) => { state.review = e.target.value; state.limit = 100; render(); });
+    el.fImage.addEventListener('change', (e) => { state.imageOnly = e.target.checked; state.limit = 100; render(); });
+    el.fQuality.addEventListener('change', (e) => { state.qualityOnly = e.target.checked; state.limit = 100; render(); });
+    document.querySelectorAll('.mode-switch .mode-btn').forEach((btn) => btn.addEventListener('click', () => {
+      state.appMode = btn.dataset.mode;
+      document.querySelectorAll('.mode-switch .mode-btn').forEach((x) => x.classList.toggle('on', x === btn));
+      render();
+    }));
+    render();
+    try {
+      const lg = await (await fetch(`${EXPLAIN_API}/v1/login`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
+      if (lg.gate && !loggedIn()) showGate(true);
+    } catch { /* API 掛掉時不擋 */ }
+  } catch (e) { el.subtitle.textContent = '載入失敗：' + e.message; }
+}
+
+(async () => {
+  const courses = COURSES_URL
+    ? await fetch(COURSES_URL).then((r) => r.json()).then((x) => x.courses || []).catch(() => [])
+    : [];
+  const wanted = params.get('course');
+  const course = courses.find((c) => c.courseId === wanted) || courses[0] || null;
+  const cd = (course && course.data) || {};
+  applyCourseMeta(course);
+  renderCourseSelector(courses, course);
+  if (el.courseSelect) el.courseSelect.addEventListener('change', (e) => {
+    const u = new URL(location.href); u.searchParams.set('course', e.target.value); location.href = u.toString();
+  });
+  const DATA_URL = params.get('data') || cd.questions || (metaData && metaData.content) || `${FILES_BASE}/knsh-math5.json`;
+  const APP_DATA_URL = params.get('appdata') || cd.appdata || (metaApp && metaApp.content) || `${FILES_BASE}/knsh-math5-appdata.json`;
+  const MATCHING_URL = params.get('matching') || cd.matching || (metaMatch && metaMatch.content) || `${FILES_BASE}/matching-pairs.json`;
+  const EXPLANATIONS_URL = params.get('explanations') || cd.explanations || (metaExplanations && metaExplanations.content) || '';
+  const QUALITY_URL = params.get('quality') || cd.quality || (metaQuality && metaQuality.content) || '';
+  await boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUALITY_URL);
+})();
