@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, play: {}, appMode: 'quiz', mineOnly: false, qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -18,7 +18,8 @@ const el = {
   addReviewer: document.getElementById('addReviewer'),
   assignToggle: document.getElementById('assignToggle'),
   assignPanel: document.getElementById('assignPanel'),
-  mineOnly: document.getElementById('mineOnly'),
+  viewAll: document.getElementById('viewAll'),
+  viewMine: document.getElementById('viewMine'),
   loginGate: document.getElementById('loginGate'),
   loginCode: document.getElementById('loginCode'),
   loginBtn: document.getElementById('loginBtn'),
@@ -389,10 +390,6 @@ function aiHtml(it) {
 function filtered() {
   const q = state.q.trim().toLowerCase();
   return state.items.filter((it) => {
-    if (state.mineOnly) {
-      const rows = state.assignments[it.id] || [];
-      if (!rows.some((a) => a.reviewerId === state.me && a.status !== 'done')) return false;
-    }
     if (state.chapter && it.unit !== state.chapter) return false;
     if (state.node && it.node !== state.node) return false;
     if (state.type && it.type !== state.type) return false;
@@ -405,8 +402,22 @@ function filtered() {
     return true;
   });
 }
+function myPendingOrder() {
+  const mine = allAssignments()
+    .filter((a) => a.reviewerId === state.me && a.status !== 'done')
+    .sort((a, b) => String(a.assignedAt || '').localeCompare(String(b.assignedAt || '')) || String(a.sourceQuestionId).localeCompare(String(b.sourceQuestionId)));
+  const order = new Map();
+  mine.forEach((a, i) => { if (!order.has(a.sourceQuestionId)) order.set(a.sourceQuestionId, i); });
+  return order;
+}
+
 function render() {
-  const list = filtered();
+  let list = filtered();
+  if (state.view === 'mine') {
+    if (!state.me) { el.subtitle.textContent = '請先選擇審查人'; el.list.innerHTML = '<p class="app-none">請先在上方「審查人」選擇你的名字。</p>'; return; }
+    const order = myPendingOrder();
+    list = list.filter((it) => order.has(it.id)).sort((a, b) => order.get(a.id) - order.get(b.id));
+  }
   el.list.innerHTML = '';
   const slice = list.slice(0, state.limit);
   const frag = document.createDocumentFragment();
@@ -463,7 +474,12 @@ function render() {
   } else if (moreObserver) {
     moreObserver.disconnect(); moreObserver = null;
   }
-  el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
+  if (state.view === 'mine') {
+    const done = allAssignments().filter((a) => a.reviewerId === state.me && a.status === 'done').length;
+    el.subtitle.textContent = `我的待審 ${list.length.toLocaleString()} 題 · 已審 ${done} 題`;
+  } else {
+    el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
+  }
   updateMyProgress();
 }
 function fill(sel, values, label) {
@@ -800,7 +816,14 @@ el.assignToggle.addEventListener('click', () => {
   el.assignToggle.classList.toggle('on', !el.assignPanel.hidden);
   renderAssignPanel();
 });
-el.mineOnly.addEventListener('change', (e) => { state.mineOnly = e.target.checked; state.limit = 100; render(); });
+const setMatchView = (v) => {
+  state.view = v; state.limit = 100;
+  if (el.viewAll) el.viewAll.classList.toggle('on', v === 'all');
+  if (el.viewMine) el.viewMine.classList.toggle('on', v === 'mine');
+  render();
+};
+if (el.viewAll) el.viewAll.addEventListener('click', () => setMatchView('all'));
+if (el.viewMine) el.viewMine.addEventListener('click', () => setMatchView('mine'));
 el.assignPanel.addEventListener('click', (e) => {
   if (e.target.id === 'asgPreview') runAssign(true);
   if (e.target.id === 'asgCreate') runAssign(false);
