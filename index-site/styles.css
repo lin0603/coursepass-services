@@ -173,3 +173,5 @@ select.mini-btn { padding: 4px 10px; }
 .chip.yes { background: #10352a; color: #57d9a3; border-color: #1c5a45; }
 .chip.no { background: #1a1d24; color: #6b7280; }
 .cpct { color: var(--muted); font-size: 12px; }
+
+.mini-btn[hidden] { display: none; }
