@@ -351,9 +351,10 @@ let progressByCourse = {};
 
 function renderResRows() {
   const fe = document.getElementById('fEdition').value;
+  const fst = document.getElementById('fStage').value;
   const fg = document.getElementById('fGrade').value;
   const fs = document.getElementById('fSubject').value;
-  const rows = RES.items.filter((r) => (!fe || String(r.edition) === fe) && (!fg || String(r.grade) === fg) && (!fs || r.subject === fs));
+  const rows = RES.items.filter((r) => (!fe || String(r.edition) === fe) && (!fst || r.stage === fst) && (!fg || String(r.grade) === fg) && (!fs || r.subject === fs));
   const ready = rows.filter((r) => r.artifacts && r.artifacts.questions).length;
   document.getElementById('resSummary').textContent = `${rows.length} 個資源 · 已備題庫 ${ready} 個`;
   document.getElementById('resRows').innerHTML = rows.map((r) => {
@@ -372,7 +373,7 @@ function renderResRows() {
     return `<tr>
       <td>${escapeHtml(r.publisherName || r.publisher || '')}</td>
       <td>${escapeHtml(String(r.edition || ''))}</td>
-      <td>${escapeHtml(String(r.grade || ''))}</td>
+      <td>${escapeHtml(r.gradeName || String(r.grade || ''))}</td>
       <td>${escapeHtml(String(r.subject || ''))}</td>
       <td><div class="chips">${chips}</div><div class="cpct">${n}/${RES.keys.length}（${cpct}%）</div></td>
       <td>${qn ? `${done} / ${qn}（${pct}%）` : '<span class="muted">—</span>'}</td>
@@ -396,12 +397,18 @@ async function renderDash() {
     for (const p of (dp.items || [])) progressByCourse[p.courseId] = p;
   } catch { /* ignore */ }
   const eds = [...new Set(RES.items.map((r) => r.edition).filter(Boolean))];
+  const sts = [...new Set(RES.items.map((r) => r.stage).filter(Boolean))];
+  const gradeName = {};
+  for (const r of RES.items) gradeName[r.grade] = r.gradeName || String(r.grade);
   const grs = [...new Set(RES.items.map((r) => r.grade).filter(Boolean))].sort((a, b) => a - b);
   const subs = [...new Set(RES.items.map((r) => r.subject).filter(Boolean))];
-  const fillSel = (id, vals) => { const sel = document.getElementById(id); sel.innerHTML = '<option value="">全部</option>' + vals.map((v) => `<option value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</option>`).join(''); };
-  fillSel('fEdition', eds); fillSel('fGrade', grs); fillSel('fSubject', subs);
+  const fillSel = (id, opts) => { const sel = document.getElementById(id); sel.innerHTML = '<option value="">全部</option>' + opts.map((o) => `<option value="${escapeHtml(String(o.v))}">${escapeHtml(String(o.t))}</option>`).join(''); };
+  fillSel('fEdition', eds.map((v) => ({ v, t: v })));
+  fillSel('fStage', sts.map((v) => ({ v, t: v })));
+  fillSel('fGrade', grs.map((v) => ({ v, t: gradeName[v] || v })));
+  fillSel('fSubject', subs.map((v) => ({ v, t: v })));
   el.subtitle.textContent = `${RES.items.length} 個資源 · 資料完整度總覽`;
-  ['fEdition', 'fGrade', 'fSubject'].forEach((id) => { document.getElementById(id).onchange = renderResRows; });
+  ['fEdition', 'fStage', 'fGrade', 'fSubject'].forEach((id) => { document.getElementById(id).onchange = renderResRows; });
   renderResRows();
 }
 
