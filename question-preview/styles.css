@@ -136,6 +136,7 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .ai-out { font-size: 14px; line-height: 1.7; color: #1f2b2a; background: #fff; border: 1px solid #e2ebe7; border-radius: 8px; padding: 10px; min-height: 60px; max-height: 420px; overflow: auto; white-space: normal; }
 .ai-none { color: #9aa9a6; }
 .rv-note { width: 100%; margin-top: 8px; border: 1px solid #bed4d7; border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+.badge.qbad { background: #fbeceb; color: #a6403b; border: 1px solid #e3c9c7; }
 .badge.rv { background: #eef4f1; color: #42606a; }
 .badge.rv-approved { background: #eaf5ee; color: #236251; }
 .badge.rv-adjust { background: #fdf1e0; color: #8a5a12; }

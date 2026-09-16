@@ -10,8 +10,9 @@
 <meta name="reviews-token" content="cp-dev-token-change-me">
 <meta name="explain-api" content="https://companion-api-dev.starxinteractive.com">
 <meta name="preview-explanations" content="https://resource-files-dev.starxinteractive.com/preview/explanations.json">
+<meta name="preview-quality" content="https://resource-files-dev.starxinteractive.com/preview/figure-quality.json">
 <title>康軒 數學 五年級 題目預覽</title>
-<link rel="stylesheet" href="./styles.css?v=20260916o">
+<link rel="stylesheet" href="./styles.css?v=20260916p">
 </head>
 <body>
 <header class="topbar">
@@ -30,6 +31,7 @@
   <select id="fStatus"><option value="">全部狀態</option></select>
   <select id="fReview"><option value="">全部審查</option><option value="approved">合格</option><option value="adjust">需調整</option><option value="rejected">不採用</option><option value="none">未設定</option></select>
   <label class="chk"><input id="fImage" type="checkbox"> 只看圖形題</label>
+  <label class="chk"><input id="fQuality" type="checkbox"> 只看品質需檢查</label>
   <span class="fsep"></span>
   <span class="mode-label">審查人</span>
   <select id="meSelect" class="me-select"></select>
@@ -40,6 +42,6 @@
 <div id="assignPanel" class="assign-panel" hidden></div>
 <main id="list" class="list"></main>
 <div id="more" class="more"></div>
-<script src="./app.js?v=20260916o"></script>
+<script src="./app.js?v=20260916p"></script>
 </body>
 </html>

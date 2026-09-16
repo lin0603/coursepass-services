@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, play: {}, appMode: 'quiz', mineOnly: false, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, play: {}, appMode: 'quiz', mineOnly: false, qualityOnly: false, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   search: document.getElementById('search'),
@@ -9,6 +9,7 @@ const el = {
   fStatus: document.getElementById('fStatus'),
   fReview: document.getElementById('fReview'),
   fImage: document.getElementById('fImage'),
+  fQuality: document.getElementById('fQuality'),
   meSelect: document.getElementById('meSelect'),
   addReviewer: document.getElementById('addReviewer'),
   assignToggle: document.getElementById('assignToggle'),
@@ -376,6 +377,7 @@ function filtered() {
     if (state.review === 'none') { if (reviewOf(it.id).status) return false; }
     else if (state.review && (reviewOf(it.id).status || '') !== state.review) return false;
     if (state.imageOnly && !it.hasFigure) return false;
+    if (state.qualityOnly && (state.quality[it.id] || {}).status !== 'needs_review') return false;
     if (q && !(`${it.prompt || ''} ${it.id} ${it.lesson || ''}`.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -400,6 +402,7 @@ function render() {
         <span class="badge ${it.status === 'approved' ? 'good' : 'bad'}">${esc(it.status)}</span>
         <span class="badge node">${esc(it.node || '未綁定')} ${esc(it.nodeName || '')}</span>
         <span class="badge diff">難度 ${esc(it.difficulty ?? '')}</span>
+        ${((state.quality[it.id] || {}).status === 'needs_review') ? `<span class="badge qbad" title="${esc(((state.quality[it.id] || {}).reasons || []).join(', '))}">品質需檢查</span>` : ''}
         <span class="badge rv rv-${esc(rev.status || 'none')}">${REVIEW_LABELS[rev.status || '']}</span>
       </div>
       ${it.chapter ? `<div class="lesson">${esc(it.chapter)}</div>` : (it.lesson ? `<div class="lesson">${esc(it.lesson)}</div>` : '')}
@@ -778,6 +781,7 @@ const metaApi = document.querySelector('meta[name="reviews-api"]');
 const metaToken = document.querySelector('meta[name="reviews-token"]');
 const metaExplain = document.querySelector('meta[name="explain-api"]');
 const metaExplanations = document.querySelector('meta[name="preview-explanations"]');
+const metaQuality = document.querySelector('meta[name="preview-quality"]');
 const DATA_URL = params.get('data') || (metaData && metaData.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5.json';
 const APP_DATA_URL = params.get('appdata') || (metaApp && metaApp.content) || 'https://resource-files-dev.starxinteractive.com/preview/knsh-math5-appdata.json';
 const MATCHING_URL = params.get('matching') || (metaMatch && metaMatch.content) || 'https://resource-files-dev.starxinteractive.com/preview/matching-pairs.json';
@@ -785,6 +789,7 @@ const REVIEWS_API = params.get('api') || (metaApi && metaApi.content) || 'https:
 const REVIEWS_TOKEN = params.get('token') || (metaToken && metaToken.content) || 'cp-dev-token-change-me';
 const EXPLAIN_API = params.get('explain') || (metaExplain && metaExplain.content) || REVIEWS_API;
 const EXPLANATIONS_URL = params.get('explanations') || (metaExplanations && metaExplanations.content) || '';
+const QUALITY_URL = params.get('quality') || (metaQuality && metaQuality.content) || '';
 
 Promise.all([
   fetch(DATA_URL).then((r) => r.json()),
@@ -795,11 +800,13 @@ Promise.all([
   fetch(`${EXPLAIN_API}/v1/explanations`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: {} })),
   fetch(`${REVIEWS_API}/v1/reviewers`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
   fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
-]).then(([d, app, match, rev, expl, explApi, rvs, asg]) => {
+  QUALITY_URL ? fetch(QUALITY_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
+]).then(([d, app, match, rev, expl, explApi, rvs, asg, qual]) => {
   state.items = d.items;
   state.appdata = app.items || {};
   state.matching = match.items || {};
   state.explanations = { ...(expl.items || {}), ...(explApi.items || {}) };
+  state.quality = qual.items || {};
   state.qreviews = {};
   for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
   state.reviewers = rvs.items || [];
@@ -820,6 +827,7 @@ Promise.all([
   el.fStatus.addEventListener('change', (e) => { state.status = e.target.value; state.limit = 100; render(); });
   el.fReview.addEventListener('change', (e) => { state.review = e.target.value; state.limit = 100; render(); });
   el.fImage.addEventListener('change', (e) => { state.imageOnly = e.target.checked; state.limit = 100; render(); });
+  el.fQuality.addEventListener('change', (e) => { state.qualityOnly = e.target.checked; state.limit = 100; render(); });
   document.querySelectorAll('.mode-switch .mode-btn').forEach((btn) => btn.addEventListener('click', () => {
     state.appMode = btn.dataset.mode;
     document.querySelectorAll('.mode-switch .mode-btn').forEach((x) => x.classList.toggle('on', x === btn));
