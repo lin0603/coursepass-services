@@ -52,7 +52,7 @@ CREATE INDEX ix_questions_pub ON questions(publisher, subject, grade);
 CREATE INDEX ix_edges_src ON edges(src);
 """
 
-PUBLISHER = {"hle": "翰林", "knsh": "康軒", "nan-i": "南一"}
+PUBLISHER = {"hle": "適翰", "knsh": "適康", "nan-i": "適南"}
 
 
 def publisher_of(name):

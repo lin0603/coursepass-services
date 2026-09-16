@@ -14,7 +14,7 @@ function q(over = {}) {
     primaryKnowledgeNodeId: 'N-5-4',
     subject: '數學',
     grade: 5,
-    publisher: '康軒',
+    publisher: '適康',
     prompt: '題目',
     questionType: 'fill_blank',
     answer: '1/2',

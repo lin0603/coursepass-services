@@ -13,7 +13,7 @@ const base = {
   primaryKnowledgeNodeId: 'N-5-4',
   subject: '數學',
   grade: 5,
-  publisher: '康軒',
+  publisher: '適康',
   prompt: '下面哪一個分數最大？',
   reviewStatus: 'approved',
 };

@@ -1,6 +1,6 @@
 # 題目預覽站（question-preview）
 
-康軒 115 上 · 數學 · 五年級題目預覽的靜態站（章節／知識節點／題型／狀態篩選、只看圖形題）。
+適康 115 上 · 數學 · 五年級題目預覽的靜態站（章節／知識節點／題型／狀態篩選、只看圖形題）。
 
 - 程式碼在本 repo（`coursepass-services/question-preview/`），**git push → Coolify 自動部署**（Dockerfile/nginx）。
 - 連連看改成 HTML 按鈕的做法見 [`MATCHING_HTML.md`](./MATCHING_HTML.md)。
