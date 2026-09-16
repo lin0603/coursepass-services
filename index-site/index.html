@@ -3,24 +3,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CoursePass 出版社資源目錄索引</title>
-  <link rel="stylesheet" href="./styles.css?v=20260916a">
+  <meta name="reviews-api" content="https://companion-api-dev.starxinteractive.com">
+  <meta name="reviews-token" content="cp-dev-token-change-me">
+  <meta name="courses-url" content="https://resource-files-dev.starxinteractive.com/preview/courses.json">
+  <meta name="review-site" content="https://question-preview-dev.starxinteractive.com">
+  <title>CoursePass 審題入口</title>
+  <link rel="stylesheet" href="./styles.css?v=20260916b">
 </head>
 <body>
+  <div id="loginGate" class="login-gate" hidden>
+    <div class="login-card">
+      <h2>CoursePass 審題入口</h2>
+      <p>請輸入通行碼</p>
+      <input id="loginCode" type="password" placeholder="通行碼" autocomplete="current-password">
+      <button id="loginBtn" type="button">登入</button>
+      <p id="loginMsg" class="login-msg"></p>
+    </div>
+  </div>
+
   <header class="topbar">
     <div class="brand">
       <span class="dot"></span>
       <div>
-        <h1>出版社資源目錄索引</h1>
+        <h1>CoursePass 審題入口</h1>
         <p id="subtitle">載入中…</p>
       </div>
     </div>
-    <div class="search-wrap">
-      <input id="search" type="search" placeholder="搜尋檔名／路徑（例如 月考卷、成語、quesdoc1CH）" autocomplete="off">
-    </div>
+    <nav class="mainnav" id="mainnav">
+      <button id="navDash" class="mini-btn on" type="button">課程審題</button>
+      <button id="navBrowse" class="mini-btn" type="button">資源瀏覽</button>
+      <button id="logoutBtn" class="mini-btn" type="button">登出</button>
+    </nav>
   </header>
 
-  <div class="layout">
+  <main id="dash" class="dash">
+    <div id="courseCards" class="course-cards"></div>
+  </main>
+
+  <div class="layout" id="browser" hidden>
     <aside class="sidebar">
       <div class="side-section">
         <div class="side-title">資源包</div>
@@ -29,6 +49,7 @@
     </aside>
 
     <main class="content">
+      <div class="browse-search"><input id="search" type="search" placeholder="搜尋檔名／路徑（例如 月考卷、成語、quesdoc1CH）" autocomplete="off"></div>
       <div class="crumbs">
         <button id="home" class="crumb">全部</button>
         <span id="crumb-path"></span>
@@ -70,6 +91,6 @@
   </div>
 
   <script src="./mammoth.browser.min.js"></script>
-  <script src="./app.js?v=20260916a"></script>
+  <script src="./app.js?v=20260916b"></script>
 </body>
 </html>

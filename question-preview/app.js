@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, play: {}, appMode: 'quiz', mineOnly: false, qualityOnly: false, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, play: {}, appMode: 'quiz', mineOnly: false, qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -455,7 +455,7 @@ function fill(sel, values, label) {
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 async function saveReview(id, nodeId, status, note, type, typeMismatch) {
-  const payload = { note, nodeId, type: type || '', typeMismatch: !!typeMismatch, reviewerId: state.me || '' };
+  const payload = { note, nodeId, type: type || '', typeMismatch: !!typeMismatch, reviewerId: state.me || '', courseId: state.courseId || undefined };
   if (status) payload.status = status; // 空字串會被後端視為非法 enum，省略
   const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, {
     method: 'PUT',
@@ -749,7 +749,7 @@ async function runAssign(preview) {
     const res = await fetch(`${REVIEWS_API}/v1/assignments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-      body: JSON.stringify({ ids, targets, copies: 2, preview }),
+      body: JSON.stringify({ ids, targets, copies: 2, preview, courseId: state.courseId || undefined }),
     });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || res.status);
@@ -893,6 +893,7 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
   const wanted = params.get('course');
   const course = courses.find((c) => c.courseId === wanted) || courses[0] || null;
   const cd = (course && course.data) || {};
+  state.courseId = (course && course.courseId) || '';
   applyCourseMeta(course);
   renderCourseSelector(courses, course);
   if (el.courseSelect) el.courseSelect.addEventListener('change', (e) => {

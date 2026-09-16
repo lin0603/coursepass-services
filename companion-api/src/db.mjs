@@ -53,6 +53,11 @@ CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
 const reviewCols = db.prepare('PRAGMA table_info(reviews)').all().map((c) => c.name);
 if (!reviewCols.includes('type')) db.exec('ALTER TABLE reviews ADD COLUMN type TEXT');
 if (!reviewCols.includes('typeMismatch')) db.exec('ALTER TABLE reviews ADD COLUMN typeMismatch INTEGER DEFAULT 0');
+// 課程欄位（多課程）
+for (const [table, col] of [['question_reviews', 'courseId'], ['assignments', 'courseId']]) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
+}
 // 舊 reviews（單筆）遷移成 question_reviews（可多審查人；legacy 以 reviewerId='' 表示）
 try {
   db.exec(`INSERT OR IGNORE INTO question_reviews (sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, updatedAt)
@@ -161,8 +166,8 @@ export const store = {
 
   // ---- 指派 ----
   createAssignments(rows, batchId) {
-    const stmt = db.prepare("INSERT OR IGNORE INTO assignments (sourceQuestionId, reviewerId, batchId, status, assignedAt) VALUES (?,?,?,'pending',?)");
-    const tx = db.transaction((rs) => { for (const r of rs) stmt.run(r.sourceQuestionId, r.reviewerId, batchId, now()); });
+    const stmt = db.prepare("INSERT OR IGNORE INTO assignments (sourceQuestionId, reviewerId, batchId, status, assignedAt, courseId) VALUES (?,?,?,'pending',?,?)");
+    const tx = db.transaction((rs) => { for (const r of rs) stmt.run(r.sourceQuestionId, r.reviewerId, batchId, now(), r.courseId || null); });
     tx(rows);
     return rows.length;
   },
@@ -214,7 +219,7 @@ export const store = {
                        FROM question_reviews ${clause} ORDER BY updatedAt DESC`)
       .all(...params).map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
   },
-  upsertQuestionReview({ sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch }) {
+  upsertQuestionReview({ sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, courseId }) {
     const existing = this.getQuestionReview(sourceQuestionId, reviewerId);
     const row = {
       sourceQuestionId, reviewerId,
@@ -223,11 +228,12 @@ export const store = {
       note: note ?? (existing ? existing.note : ''),
       type: type ?? (existing ? existing.type : null),
       typeMismatch: (typeMismatch ?? (existing ? existing.typeMismatch : false)) ? 1 : 0,
+      courseId: courseId ?? (existing ? existing.courseId : null),
       updatedAt: now(),
     };
-    db.prepare(`INSERT INTO question_reviews (sourceQuestionId,reviewerId,nodeId,status,note,type,typeMismatch,updatedAt) VALUES (?,?,?,?,?,?,?,?)
-                ON CONFLICT(sourceQuestionId, reviewerId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, typeMismatch=excluded.typeMismatch, updatedAt=excluded.updatedAt`)
-      .run(row.sourceQuestionId, row.reviewerId, row.nodeId, row.status, row.note, row.type, row.typeMismatch, row.updatedAt);
+    db.prepare(`INSERT INTO question_reviews (sourceQuestionId,reviewerId,nodeId,status,note,type,typeMismatch,courseId,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId, reviewerId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, typeMismatch=excluded.typeMismatch, courseId=excluded.courseId, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.reviewerId, row.nodeId, row.status, row.note, row.type, row.typeMismatch, row.courseId, row.updatedAt);
     if (reviewerId) this.markAssignmentDone(sourceQuestionId, reviewerId);
     const changed = !existing
       || String(existing.status ?? '') !== String(row.status ?? '')
@@ -250,6 +256,22 @@ export const store = {
   deleteQuestionReview(sourceQuestionId, reviewerId) {
     return db.prepare('DELETE FROM question_reviews WHERE sourceQuestionId=? AND reviewerId=?').run(sourceQuestionId, reviewerId).changes > 0;
   },
+  // 各課程審題進度（審查站首頁用）
+  courseProgress() {
+    const map = {};
+    for (const r of db.prepare(`SELECT courseId, sourceQuestionId, COUNT(*) n FROM question_reviews
+                                WHERE courseId IS NOT NULL AND courseId <> '' GROUP BY courseId, sourceQuestionId`).all()) {
+      const c = (map[r.courseId] = map[r.courseId] || { courseId: r.courseId, questions: 0, reviews: 0, done: 0 });
+      c.questions += 1; c.reviews += r.n; if (r.n >= 2) c.done += 1;
+    }
+    for (const a of db.prepare(`SELECT courseId, COUNT(*) total, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) done
+                                FROM assignments WHERE courseId IS NOT NULL AND courseId <> '' GROUP BY courseId`).all()) {
+      const c = (map[a.courseId] = map[a.courseId] || { courseId: a.courseId, questions: 0, reviews: 0, done: 0 });
+      c.assigned = a.total; c.assignedDone = a.done;
+    }
+    return Object.values(map);
+  },
+
   // 老師改選的題型（供活動組裝覆寫）
   typeOverrides() {
     const rows = db.prepare("SELECT sourceQuestionId, type FROM question_reviews WHERE type IS NOT NULL AND type <> '' ORDER BY updatedAt DESC").all();

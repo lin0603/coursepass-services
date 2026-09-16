@@ -194,6 +194,7 @@ const reviewSchema = z.object({
   typeMismatch: z.boolean().optional(),
   nodeId: z.string().max(64).optional(),
   reviewerId: z.string().max(64).optional(),
+  courseId: z.string().max(64).optional(),
 });
 
 // 匯出（給 AI 後續優化題目用）：結構化審查意見
@@ -222,7 +223,7 @@ app.put('/v1/reviews/:id', (req, res) => {
   const parsed = reviewSchema.safeParse(body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
   const reviewerId = parsed.data.reviewerId || '';
-  res.json(store.upsertQuestionReview({ sourceQuestionId: req.params.id, reviewerId, nodeId: parsed.data.nodeId, status: parsed.data.status, note: parsed.data.note, type: parsed.data.type, typeMismatch: parsed.data.typeMismatch }));
+  res.json(store.upsertQuestionReview({ sourceQuestionId: req.params.id, reviewerId, nodeId: parsed.data.nodeId, status: parsed.data.status, note: parsed.data.note, type: parsed.data.type, typeMismatch: parsed.data.typeMismatch, courseId: parsed.data.courseId }));
 });
 app.delete('/v1/reviews/:id', (req, res) => {
   const reviewerId = req.query.reviewer || '';
@@ -250,11 +251,12 @@ const assignSchema = z.object({
   ids: z.array(z.string()).min(1),
   targets: z.array(z.object({ reviewerId: z.string(), count: z.number().int().min(0) })).min(1),
   copies: z.number().int().min(2).max(3).default(2),
+  courseId: z.string().max(64).optional(),
   preview: z.boolean().optional(),
   excludeAssigned: z.boolean().optional(),
 });
 
-function planAssignments(ids, targets, copies, exclude) {
+function planAssignments(ids, targets, copies, exclude, courseId) {
   const seq = [];
   const t = targets.map((x) => ({ id: x.reviewerId, left: x.count }));
   let remaining = t.reduce((s, x) => s + x.left, 0);
@@ -274,8 +276,8 @@ function planAssignments(ids, targets, copies, exclude) {
   const picks = exclude ? ids.filter((id) => !exclude.has(id)) : ids;
   const rows = [];
   for (let k = 0; k < pairs.length && k < picks.length; k++) {
-    rows.push({ sourceQuestionId: picks[k], reviewerId: pairs[k][0] });
-    rows.push({ sourceQuestionId: picks[k], reviewerId: pairs[k][1] });
+    rows.push({ sourceQuestionId: picks[k], reviewerId: pairs[k][0], courseId });
+    rows.push({ sourceQuestionId: picks[k], reviewerId: pairs[k][1], courseId });
   }
   return rows;
 }
@@ -283,9 +285,9 @@ function planAssignments(ids, targets, copies, exclude) {
 app.post('/v1/assignments', (req, res) => {
   const parsed = assignSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
-  const { ids, targets, copies, preview, excludeAssigned } = parsed.data;
+  const { ids, targets, copies, preview, excludeAssigned, courseId } = parsed.data;
   const exclude = excludeAssigned === false ? null : new Set(store.assignedQuestionIds());
-  const rows = planAssignments(ids, targets, copies, exclude);
+  const rows = planAssignments(ids, targets, copies, exclude, courseId);
   const questions = new Set(rows.map((r) => r.sourceQuestionId)).size;
   if (preview) return res.json({ preview: true, questions, assignments: rows.length, rows });
   const batchId = `b_${Date.now().toString(36)}`;
@@ -299,6 +301,7 @@ app.post('/v1/assignments/reassign', (req, res) => {
   res.json({ moved: store.reassign({ from: body.from, to: body.to, limit: Number(body.limit) || 1000 }) });
 });
 app.get('/v1/review-progress', (_req, res) => res.json({ items: store.reviewProgress() }));
+app.get('/v1/course-progress', (_req, res) => res.json({ items: store.courseProgress() }));
 
 app.use((err, _req, res, _next) => {
   console.error(err);

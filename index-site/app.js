@@ -26,6 +26,16 @@ const el = {
   search: document.getElementById('search'),
   more: document.getElementById('more'),
   home: document.getElementById('home'),
+  loginGate: document.getElementById('loginGate'),
+  loginCode: document.getElementById('loginCode'),
+  loginBtn: document.getElementById('loginBtn'),
+  loginMsg: document.getElementById('loginMsg'),
+  logoutBtn: document.getElementById('logoutBtn'),
+  navDash: document.getElementById('navDash'),
+  navBrowse: document.getElementById('navBrowse'),
+  dash: document.getElementById('dash'),
+  browser: document.getElementById('browser'),
+  courseCards: document.getElementById('courseCards'),
   preview: document.getElementById('preview'),
   previewTitle: document.getElementById('preview-title'),
   previewBody: document.getElementById('preview-body'),
@@ -45,14 +55,14 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-async function init() {
+async function initBrowser(initialSlug) {
   const res = await fetch('./data/manifest.json');
   state.manifest = await res.json();
   const totalFiles = state.manifest.archives.reduce((sum, a) => sum + a.fileCount, 0);
   const totalSize = state.manifest.archives.reduce((sum, a) => sum + a.totalSize, 0);
   el.subtitle.textContent = `${state.manifest.archives.length} 個資源包 · ${totalFiles.toLocaleString()} 檔 · ${human(totalSize)}`;
   renderArchiveList();
-  const wanted = new URLSearchParams(location.search).get('archive');
+  const wanted = initialSlug || new URLSearchParams(location.search).get('archive');
   const first = (wanted && state.manifest.archives.find((a) => a.slug === wanted))
     || state.manifest.archives.find((a) => a.kind === 'iso')
     || state.manifest.archives[0];
@@ -280,8 +290,8 @@ function closePreview() {
   el.previewBody.innerHTML = '';
 }
 
-el.previewClose.addEventListener('click', closePreview);
-el.preview.addEventListener('click', (event) => {
+if (el.previewClose) el.previewClose.addEventListener('click', closePreview);
+if (el.preview) el.preview.addEventListener('click', (event) => {
   if (event.target === el.preview) closePreview();
 });
 document.addEventListener('keydown', (event) => {
@@ -289,14 +299,91 @@ document.addEventListener('keydown', (event) => {
 });
 
 let searchTimer = null;
-el.search.addEventListener('input', () => {
+if (el.search) el.search.addEventListener('input', () => {
   state.query = el.search.value;
   state.limit = 300;
   clearTimeout(searchTimer);
   searchTimer = setTimeout(render, 120);
 });
-el.home.addEventListener('click', () => setPrefix(''));
+if (el.home) el.home.addEventListener('click', () => setPrefix(''));
 
-init().catch((error) => {
-  el.subtitle.textContent = `載入失敗：${error.message}`;
-});
+// ---- 簡易登入 + 課程審題首頁 ----
+const params = new URLSearchParams(location.search);
+const API = (document.querySelector('meta[name="reviews-api"]') || {}).content || 'https://companion-api-dev.starxinteractive.com';
+const TOKEN = (document.querySelector('meta[name="reviews-token"]') || {}).content || '';
+const COURSES_URL = (document.querySelector('meta[name="courses-url"]') || {}).content || '';
+const REVIEW_SITE = (document.querySelector('meta[name="review-site"]') || {}).content || '';
+const H = { Authorization: `Bearer ${TOKEN}` };
+const loggedIn = () => localStorage.getItem('cp_pass') === '1';
+function showGate(show) { el.loginGate.hidden = !show; }
+async function doLogin() {
+  el.loginMsg.textContent = '登入中…';
+  try {
+    const d = await (await fetch(`${API}/v1/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...H }, body: JSON.stringify({ code: el.loginCode.value }) })).json();
+    if (d.ok) { localStorage.setItem('cp_pass', '1'); showGate(false); start(); } else el.loginMsg.textContent = '通行碼錯誤';
+  } catch (e) { el.loginMsg.textContent = '登入失敗：' + e.message; }
+}
+el.loginBtn.addEventListener('click', doLogin);
+el.loginCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+el.logoutBtn.addEventListener('click', () => { localStorage.removeItem('cp_pass'); location.reload(); });
+
+let browserInited = false;
+function showView(which, archiveSlug) {
+  el.dash.hidden = which !== 'dash';
+  el.browser.hidden = which !== 'browse';
+  el.navDash.classList.toggle('on', which === 'dash');
+  el.navBrowse.classList.toggle('on', which === 'browse');
+  if (which === 'browse') {
+    if (!browserInited) {
+      browserInited = true;
+      initBrowser(archiveSlug).catch((e) => { el.subtitle.textContent = `載入失敗：${e.message}`; });
+    } else if (archiveSlug && typeof selectArchive === 'function') {
+      selectArchive(archiveSlug);
+    }
+  }
+}
+el.navDash.addEventListener('click', () => showView('dash'));
+el.navBrowse.addEventListener('click', () => showView('browse'));
+
+async function renderDash() {
+  let courses = [];
+  try { courses = (await (await fetch(COURSES_URL)).json()).courses || []; } catch { /* ignore */ }
+  let progress = {};
+  try {
+    for (const p of (((await (await fetch(`${API}/v1/course-progress`, { headers: H })).json()).items) || [])) progress[p.courseId] = p;
+  } catch { /* ignore */ }
+  el.subtitle.textContent = `${courses.length} 個課程 · 審題進度總覽`;
+  el.courseCards.innerHTML = courses.map((c) => {
+    const p = progress[c.courseId] || {};
+    const total = c.questionCount || 0;
+    const done = p.done || 0;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const link = `${REVIEW_SITE}/?course=${encodeURIComponent(c.courseId)}`;
+    return `<div class="course-card">
+      <div class="cc-title">${escapeHtml(c.name || c.courseId)}</div>
+      <div class="cc-meta">${escapeHtml(c.publisher || '')} · ${escapeHtml(String(c.grade || ''))} 年級 · ${escapeHtml(c.subject || '')}</div>
+      <div class="cc-progress"><div class="bar"><span style="width:${pct}%"></span></div><span class="cc-pct">${done} / ${total} 題（${pct}%）</span></div>
+      <div class="cc-sub">審查意見 ${p.reviews || 0} 筆 · 指派 ${p.assignedDone || 0}/${p.assigned || 0}</div>
+      <div class="cc-actions">
+        <a class="mini-btn on" href="${link}" target="_blank" rel="noopener">進入審題站</a>
+        ${c.archiveSlug ? `<button class="mini-btn" data-archive="${escapeHtml(c.archiveSlug)}">資源包</button>` : ''}
+      </div>
+    </div>`;
+  }).join('') || '<p class="muted">尚無課程（請在 courses.json 新增）。</p>';
+  el.courseCards.querySelectorAll('[data-archive]').forEach((b) => b.addEventListener('click', () => showView('browse', b.dataset.archive)));
+}
+
+async function start() {
+  if (params.get('archive')) { showView('browse'); return; }
+  showView('dash');
+  await renderDash();
+}
+
+(async () => {
+  try {
+    const g = await (await fetch(`${API}/v1/login`, { headers: H })).json();
+    if (g.gate && !loggedIn()) { showGate(true); return; }
+  } catch { /* API 掛掉時不擋 */ }
+  showGate(false);
+  start();
+})();
