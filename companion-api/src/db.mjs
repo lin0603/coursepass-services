@@ -28,9 +28,10 @@ CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWron
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
 `);
 
-// 舊資料庫補欄位：reviews.type（老師選定的題型）
+// 舊資料庫補欄位：reviews.type（老師選定的題型）、reviews.typeMismatch（題型不適合）
 const reviewCols = db.prepare('PRAGMA table_info(reviews)').all().map((c) => c.name);
 if (!reviewCols.includes('type')) db.exec('ALTER TABLE reviews ADD COLUMN type TEXT');
+if (!reviewCols.includes('typeMismatch')) db.exec('ALTER TABLE reviews ADD COLUMN typeMismatch INTEGER DEFAULT 0');
 
 const now = () => new Date().toISOString();
 
@@ -70,7 +71,8 @@ export const store = {
     return db.prepare('SELECT sourceQuestionId, nodeId, wrongCount, lastWrongAt FROM wrongbook WHERE learnerId=? ORDER BY lastWrongAt DESC').all(learnerId);
   },
   getReview(sourceQuestionId) {
-    return db.prepare('SELECT sourceQuestionId, nodeId, status, note, type, reviewer, updatedAt FROM reviews WHERE sourceQuestionId=?').get(sourceQuestionId) || null;
+    const r = db.prepare('SELECT sourceQuestionId, nodeId, status, note, type, typeMismatch, reviewer, updatedAt FROM reviews WHERE sourceQuestionId=?').get(sourceQuestionId);
+    return r ? { ...r, typeMismatch: !!r.typeMismatch } : null;
   },
   listReviews({ node, status } = {}) {
     const where = [];
@@ -78,9 +80,10 @@ export const store = {
     if (node) { where.push('nodeId = ?'); params.push(node); }
     if (status) { where.push('status = ?'); params.push(status); }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    return db.prepare(`SELECT sourceQuestionId, nodeId, status, note, type, reviewer, updatedAt FROM reviews ${clause} ORDER BY updatedAt DESC`).all(...params);
+    return db.prepare(`SELECT sourceQuestionId, nodeId, status, note, type, typeMismatch, reviewer, updatedAt FROM reviews ${clause} ORDER BY updatedAt DESC`)
+      .all(...params).map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
   },
-  upsertReview({ sourceQuestionId, nodeId, status, note, type, reviewer }) {
+  upsertReview({ sourceQuestionId, nodeId, status, note, type, typeMismatch, reviewer }) {
     const existing = this.getReview(sourceQuestionId);
     const row = {
       sourceQuestionId,
@@ -88,13 +91,14 @@ export const store = {
       status: status ?? (existing ? existing.status : 'pending'),
       note: note ?? (existing ? existing.note : ''),
       type: type ?? (existing ? existing.type : null),
+      typeMismatch: (typeMismatch ?? (existing ? existing.typeMismatch : false)) ? 1 : 0,
       reviewer: reviewer ?? (existing ? existing.reviewer : null),
       updatedAt: now(),
     };
-    db.prepare(`INSERT INTO reviews (sourceQuestionId,nodeId,status,note,type,reviewer,updatedAt) VALUES (?,?,?,?,?,?,?)
-                ON CONFLICT(sourceQuestionId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, reviewer=excluded.reviewer, updatedAt=excluded.updatedAt`)
-      .run(row.sourceQuestionId, row.nodeId, row.status, row.note, row.type, row.reviewer, row.updatedAt);
-    return row;
+    db.prepare(`INSERT INTO reviews (sourceQuestionId,nodeId,status,note,type,typeMismatch,reviewer,updatedAt) VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, typeMismatch=excluded.typeMismatch, reviewer=excluded.reviewer, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.nodeId, row.status, row.note, row.type, row.typeMismatch, row.reviewer, row.updatedAt);
+    return { ...row, typeMismatch: !!row.typeMismatch };
   },
   deleteReview(sourceQuestionId) {
     return db.prepare('DELETE FROM reviews WHERE sourceQuestionId=?').run(sourceQuestionId).changes > 0;

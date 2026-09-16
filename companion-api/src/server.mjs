@@ -184,6 +184,7 @@ const reviewSchema = z.object({
   status: z.enum(['pending', 'approved', 'adjust', 'rejected']).optional(),
   note: z.string().max(2000).optional(),
   type: z.string().max(32).optional(),
+  typeMismatch: z.boolean().optional(),
   nodeId: z.string().max(64).optional(),
   reviewer: z.string().max(80).optional(),
 });

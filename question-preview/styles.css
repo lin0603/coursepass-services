@@ -67,17 +67,19 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .app-none { color: #a6403b; margin: 6px 0 0; }
 .app-fig img { max-width: 100%; border: 1px solid #e2ebe7; border-radius: 8px; margin: 6px 0; }
 /* 審查 */
-.review { margin-top: 10px; border-top: 1px dashed #dbe5e2; padding-top: 8px; }
-.rv-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.rv-row label { font-weight: 700; color: #42606a; font-size: 13px; }
-.rv-btn { min-height: 30px; padding: 2px 12px; border: 1px solid #bed4d7; border-radius: 8px; background: #f4f8f7; color: #2b4550; font: inherit; font-weight: 600; cursor: pointer; }
+.review { margin-top: 14px; border-top: 1px dashed #dbe5e2; padding-top: 14px; }
+.rv-group { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+.rv-label { flex: 0 0 44px; padding-top: 8px; font-weight: 700; color: #42606a; font-size: 13px; }
+.rv-btns { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 10px; }
+.rv-type-group[hidden] { display: none; }
+.rv-btn { min-height: 34px; padding: 4px 16px; border: 1px solid #bed4d7; border-radius: 8px; background: #f4f8f7; color: #2b4550; font: inherit; font-weight: 600; cursor: pointer; }
 .rv-btn:hover:not([disabled]) { border-color: #087e8b; background: #e4f3ee; }
 .rv-btn.on { background: #087e8b; border-color: #087e8b; color: #fff; }
 .rv-btn[disabled] { background: #e7edec; color: #9aa9a6; border-color: #dbe5e2; cursor: default; }
+.rv-mismatch.on { background: #b45309; border-color: #b45309; color: #fff; }
 .rv-type.sug { border-style: dashed; }
-.rv-type.sug:not(.on)::before { content: ''; }
 .rv-hint { font-size: 12px; color: #8b93a5; }
-.rv-clear { min-height: 30px; padding: 2px 10px; border: 1px solid #e3c9c7; border-radius: 8px; background: #fbf3f2; color: #a6403b; font: inherit; font-weight: 600; cursor: pointer; }
+.rv-clear { min-height: 34px; padding: 4px 12px; border: 1px solid #e3c9c7; border-radius: 8px; background: #fbf3f2; color: #a6403b; font: inherit; font-weight: 600; cursor: pointer; }
 .rv-state { font-size: 13px; color: #236251; }
 /* AI 解題（第三欄） */
 .ai { border: 1px solid #d9e3ea; border-radius: 10px; background: #f7fafc; padding: 10px; }

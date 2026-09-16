@@ -31,7 +31,7 @@ function optionsOf(it) {
   if (it.type === 'true_false') return ['正確', '錯誤'];
   return (it.options || []).map((o) => (typeof o === 'object' ? o.content : o)).filter(Boolean);
 }
-function reviewOf(id) { return state.reviews[id] || { status: '', note: '', type: '' }; }
+function reviewOf(id) { return state.reviews[id] || { status: '', note: '', type: '', typeMismatch: false }; }
 
 // 可選題型（活動層）與「建議題型」
 const TYPES = [['choice', '點選'], ['fill_blank', '填空'], ['word_order', '排序'], ['matching', '連連看'], ['listening', '聽力']];
@@ -248,19 +248,25 @@ function appViewHtml(it) {
 
 function reviewHtml(it) {
   const r = reviewOf(it.id);
-  const statusBtns = ['approved', 'adjust', 'rejected'].map((s) => `<button type="button" class="rv-btn rv-status-btn${r.status === s ? ' on' : ''}" data-status="${s}">${REVIEW_LABELS[s]}</button>`).join('');
   const suggested = suggestedTypeOf(it);
-  const chosen = r.type || suggested;
+  const statusBtns = ['approved', 'adjust', 'rejected'].map((s) => `<button type="button" class="rv-btn rv-status-btn${r.status === s ? ' on' : ''}" data-status="${s}">${REVIEW_LABELS[s]}</button>`).join('');
+  const mismatchBtn = `<button type="button" class="rv-btn rv-mismatch${r.typeMismatch ? ' on' : ''}">題型不適合</button>`;
+  const chosen = r.type || '';
   const typeBtns = TYPES.map(([t, label]) => {
     const on = t === chosen;
     const sug = t === suggested;
-    return `<button type="button" class="rv-btn rv-type${on ? ' on' : ''}${sug ? ' sug' : ''}" data-type="${t}"${on ? ' disabled' : ''}>${label}${sug ? ' ★' : ''}</button>`;
+    return `<button type="button" class="rv-btn rv-type${on ? ' on' : ''}${sug ? ' sug' : ''}" data-type="${t}"${on || sug ? ' disabled' : ''}>${label}${sug ? ' ★' : ''}</button>`;
   }).join('');
-  return `<section class="review" data-id="${esc(it.id)}" data-type="${esc(chosen)}">
-    <div class="rv-row"><label>審查</label>${statusBtns}
-      <button type="button" class="rv-clear">清除</button>
-      <span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
-    <div class="rv-row"><label>題型</label>${typeBtns}<span class="rv-hint">★ 建議題型</span></div>
+  const showType = !!(r.typeMismatch || chosen);
+  return `<section class="review" data-id="${esc(it.id)}" data-type="${esc(chosen)}" data-mismatch="${r.typeMismatch ? '1' : '0'}">
+    <div class="rv-group">
+      <div class="rv-label">審查</div>
+      <div class="rv-btns">${statusBtns}${mismatchBtn}<button type="button" class="rv-clear">清除</button><span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
+    </div>
+    <div class="rv-group rv-type-group"${showType ? '' : ' hidden'}>
+      <div class="rv-label">題型</div>
+      <div class="rv-btns">${typeBtns}<span class="rv-hint">★ 目前題型（不適合才需改選）</span></div>
+    </div>
     <textarea class="rv-note" rows="2" placeholder="調整註解／原因（會存到雲端）">${esc(r.note || '')}</textarea>
   </section>`;
 }
@@ -351,11 +357,11 @@ function fill(sel, values, label) {
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
-async function saveReview(id, nodeId, status, note, type) {
+async function saveReview(id, nodeId, status, note, type, typeMismatch) {
   const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-    body: JSON.stringify({ status, note, type, nodeId }),
+    body: JSON.stringify({ status, note, type, typeMismatch, nodeId }),
   });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
@@ -445,16 +451,29 @@ el.list.addEventListener('click', async (event) => {
   }
   const statusBtn = event.target.closest('.rv-status-btn');
   const typeBtn = event.target.closest('.rv-type');
+  const mismatchBtn = event.target.closest('.rv-mismatch');
   const clearBtn = event.target.closest('.rv-clear');
-  if (!statusBtn && !typeBtn && !clearBtn) return;
-  const section = (statusBtn || typeBtn || clearBtn).closest('.review');
+  if (!statusBtn && !typeBtn && !mismatchBtn && !clearBtn) return;
+  const section = (statusBtn || typeBtn || mismatchBtn || clearBtn).closest('.review');
   const id = section.dataset.id;
   const item = state.items.find((i) => i.id === id);
   const stateEl = section.querySelector('.rv-state');
   const badge = section.closest('.card').querySelector('.badge.rv');
   const note = section.querySelector('.rv-note').value;
-  const syncButtons = (chosen) => {
-    section.querySelectorAll('.rv-type').forEach((b) => { const on = b.dataset.type === chosen; b.classList.toggle('on', on); b.disabled = on; });
+  const suggested = suggestedTypeOf(item);
+  const syncType = (chosen) => {
+    section.dataset.type = chosen || '';
+    section.querySelectorAll('.rv-type').forEach((b) => {
+      const on = b.dataset.type === chosen;
+      const sug = b.dataset.type === suggested;
+      b.classList.toggle('on', on);
+      b.disabled = on || sug;
+    });
+  };
+  const setMismatch = (on, chosen) => {
+    section.dataset.mismatch = on ? '1' : '0';
+    section.querySelector('.rv-mismatch').classList.toggle('on', on);
+    section.querySelector('.rv-type-group').hidden = !(on || chosen);
   };
   try {
     if (clearBtn) {
@@ -464,7 +483,7 @@ el.list.addEventListener('click', async (event) => {
       delete state.reviews[id];
       section.querySelector('.rv-note').value = '';
       section.querySelectorAll('.rv-status-btn').forEach((b) => b.classList.remove('on'));
-      section.dataset.type = suggestedTypeOf(item); syncButtons(section.dataset.type);
+      setMismatch(false, ''); syncType('');
       badge.textContent = REVIEW_LABELS[''];
       badge.className = 'badge rv rv-none';
       stateEl.textContent = '已清除';
@@ -472,13 +491,14 @@ el.list.addEventListener('click', async (event) => {
     }
     const prev = reviewOf(id);
     const status = statusBtn ? statusBtn.dataset.status : (prev.status || '');
-    const type = typeBtn ? typeBtn.dataset.type : (prev.type || section.dataset.type || '');
+    let type = typeBtn ? typeBtn.dataset.type : (prev.type || '');
+    let typeMismatch = prev.typeMismatch;
+    if (mismatchBtn) { typeMismatch = !prev.typeMismatch; if (!typeMismatch) type = ''; }
     stateEl.textContent = '儲存中…';
-    const saved = await saveReview(id, item ? item.node : undefined, status, note, type);
-    state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, updatedAt: saved.updatedAt };
-    section.dataset.type = saved.type || type;
+    const saved = await saveReview(id, item ? item.node : undefined, status, note, type, typeMismatch);
+    state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, typeMismatch: saved.typeMismatch, updatedAt: saved.updatedAt };
     section.querySelectorAll('.rv-status-btn').forEach((b) => b.classList.toggle('on', b.dataset.status === saved.status));
-    syncButtons(section.dataset.type);
+    setMismatch(saved.typeMismatch, saved.type); syncType(saved.type || '');
     stateEl.textContent = '已儲存 ✓';
     badge.textContent = REVIEW_LABELS[saved.status || ''];
     badge.className = `badge rv rv-${saved.status || 'none'}`;
@@ -497,7 +517,7 @@ el.list.addEventListener('focusout', async (event) => {
   if (note.value === (cur.note || '')) return;
   const stateEl = section.querySelector('.rv-state');
   try {
-    const saved = await saveReview(id, item ? item.node : undefined, cur.status || '', note.value, cur.type || section.dataset.type || '');
+    const saved = await saveReview(id, item ? item.node : undefined, cur.status || '', note.value, cur.type || '', cur.typeMismatch);
     state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, updatedAt: saved.updatedAt };
     stateEl.textContent = '已儲存 ✓';
   } catch (e) { stateEl.textContent = '失敗：' + e.message; }
