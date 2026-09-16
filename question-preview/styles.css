@@ -95,7 +95,7 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .app-match-html { position: relative; display: flex; flex-direction: column; gap: 96px; padding: 16px 12px; background: #fff; border: 1px solid #e2ebe7; border-radius: 10px; }
 .match-row { display: grid; gap: 8px; position: relative; z-index: 2; }
 .match-bottom .app-match-tile { font-size: 13px; }
-.app-match-tile { position: relative; appearance: none; cursor: pointer; color: #17211f; font: 600 12px/1.45 -apple-system, "PingFang TC", system-ui, sans-serif; text-align: center; border: 1.5px solid #cbd5d1; border-radius: 8px; background: #f4f7f6; padding: 8px 6px; }
+.app-match-tile { position: relative; min-width: 0; appearance: none; cursor: pointer; color: #17211f; font: 600 12px/1.45 -apple-system, "PingFang TC", system-ui, sans-serif; text-align: center; border: 1.5px solid #cbd5d1; border-radius: 8px; background: #f4f7f6; padding: 8px 6px; }
 .app-match-tile:hover, .app-match-tile.selected { border-color: #087e8b; box-shadow: 0 0 0 3px rgba(8, 126, 139, .22); }
 .app-match-tile.selected { background-color: #e4f3ee; }
 .match-node .match-dot { position: absolute; left: 50%; width: 7px; height: 7px; border-radius: 50%; background: #2b2b2b; transform: translateX(-50%); }

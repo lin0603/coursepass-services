@@ -78,7 +78,10 @@ function matchNodeHtml(m, id, b, i, side, play) {
   const mode = modeOf(id, side);
   const [y1, x1, y2, x2] = b.box;
   const fig = mode === 'figure';
-  const style = fig ? ` style="aspect-ratio:${Math.max(1, x2 - x1)} / ${Math.max(1, y2 - y1)};${cropBg(m.image, b.box)}"` : '';
+  // 比例需用原圖像素（正規化 0–1000 在 x/y 兩軸不同尺度，直接 dx/dy 會變形）
+  const dx = Math.max(1, x2 - x1) * (m.width || 1000);
+  const dy = Math.max(1, y2 - y1) * (m.height || 1000);
+  const style = fig ? ` style="aspect-ratio:${dx} / ${dy};${cropBg(m.image, b.box)}"` : '';
   const inner = fig ? '' : fracHtml(b.label || '');
   return `<button type="button" class="app-match-tile match-node match-${side}${fig ? ' match-fig' : ''}${sel}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}"${style}>${inner}<span class="match-dot"></span></button>`;
 }
@@ -145,12 +148,27 @@ function matchingView(it) {
       <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
   }
   // 互動題：以 HTML 按鈕重畫（上排＝a、下排＝b；文字用 HTML、圖形用原圖裁切），連線量測後繪製
-  const topNodes = m.boxes.map((b, i) => (left.has(i) ? matchNodeHtml(m, it.id, b, i, 'top', play) : '')).join('');
-  const bottomNodes = m.boxes.map((b, i) => (right.has(i) ? matchNodeHtml(m, it.id, b, i, 'bottom', play) : '')).join('');
+  const pw = (i) => { const [, x1, , x2] = m.boxes[i].box; return Math.max(1, x2 - x1) / 1000 * W; };
+  const topIdx = m.boxes.map((_, i) => i).filter((i) => left.has(i));
+  const botIdx = m.boxes.map((_, i) => i).filter((i) => right.has(i));
+  const sumOf = (idx) => idx.reduce((s, i) => s + pw(i), 0);
+  const sumTop = sumOf(topIdx);
+  const sumBot = sumOf(botIdx);
+  const total = Math.max(sumTop, sumBot) || 1;
+  // 圖形排：欄寬依原圖像素寬等比例（同一 scale），短排補一個空白欄共用比例；文字排：等寬。
+  const colsFor = (idx, mode, sum) => {
+    if (mode !== 'figure') return `repeat(${Math.max(1, idx.length)}, 1fr)`;
+    const parts = idx.map((i) => `${pw(i).toFixed(2)}fr`);
+    const spacer = total - sum;
+    if (spacer > 0.5) parts.push(`${spacer.toFixed(2)}fr`);
+    return parts.join(' ');
+  };
+  const topNodes = topIdx.map((i) => matchNodeHtml(m, it.id, m.boxes[i], i, 'top', play)).join('');
+  const bottomNodes = botIdx.map((i) => matchNodeHtml(m, it.id, m.boxes[i], i, 'bottom', play)).join('');
   return `<div class="app-match-board app-match-html" data-match-id="${esc(it.id)}">
-    <div class="match-row match-top" style="grid-template-columns:repeat(${Math.max(1, left.size)}, 1fr)">${topNodes}</div>
+    <div class="match-row match-top" style="grid-template-columns:${colsFor(topIdx, modeOf(it.id, 'top'), sumTop)}">${topNodes}</div>
     <svg class="match-lines" aria-hidden="true"></svg>
-    <div class="match-row match-bottom" style="grid-template-columns:repeat(${Math.max(1, right.size)}, 1fr)">${bottomNodes}</div>
+    <div class="match-row match-bottom" style="grid-template-columns:${colsFor(botIdx, modeOf(it.id, 'bottom'), sumBot)}">${bottomNodes}</div>
   </div>
     <p class="app-match-help">先點上方元件，再點下方元件完成配對。${play.selected === null ? '' : '請選擇對應的下方元件。'}</p>
     <p class="app-correct app-match-result">${matchingResult(m, play)}</p>`;
@@ -176,9 +194,12 @@ function appViewHtml(it) {
   } else {
     body = `<p class="app-correct">答案：${esc(String(a.answer ?? ''))}</p>`;
   }
-  const fig = a.figureUrl ? `<div class="app-fig"><img loading="lazy" src="${esc(a.figureUrl)}" alt="題圖"></div>` : '';
+  // 連連看：已用 HTML 重畫元件，題目文字與題圖皆不顯示
+  const isMatching = a.type === 'matching';
+  const promptBlock = isMatching ? '' : `<div class="app-prompt">${prompt}</div>`;
+  const fig = (!isMatching && a.figureUrl) ? `<div class="app-fig"><img loading="lazy" src="${esc(a.figureUrl)}" alt="題圖"></div>` : '';
   return `<section class="app-view"><div class="app-head">App 呈現 <span class="app-label">${label}</span></div>
-    <div class="app-phone"><div class="app-prompt">${prompt}</div>${fig}${body}</div></section>`;
+    <div class="app-phone">${promptBlock}${fig}${body}</div></section>`;
 }
 
 function reviewHtml(it) {

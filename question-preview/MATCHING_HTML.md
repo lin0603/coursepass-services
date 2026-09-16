@@ -77,3 +77,33 @@
 
 - 抽取品質：vision 可能誤判 pairs（例：`EMA1509004903` a∩b 重疊、`EMA1509000635` 少一組），需重跑或人工複核。
 - 圖形型按鈕內容仍是原圖點陣裁切，非向量、未重繪。
+
+## 9. 裁圖精修（box snap，2026-09）
+
+**問題**：`gen_matching_pairs.mjs` 用 DeepSeek V4.1 Flash 視覺吐出的 `box_2d` 常鬆散／偏移
+（框到連接點、留白、或框到鄰居），直接裁會「亂七八糟」。Vision-only 無法穩定給到像素級外框；
+Gemini 2.5 Flash 的 object detection（官方 `box_2d` 0–1000）在此類圖同樣粗、且會把《答案》區也算進來
+（另有 instance segmentation mask 可用，但對這種線稿/示意圖不穩）。
+
+**方法（hybrid：vision anchor + 連通元件 snap）**：
+
+1. 影像二值化：非白 `min(R,G,B) < 235` → 8-連通元件。
+2. 移除小元件（連接點圓點、文字筆畫）：bbox 長邊 `< small_frac · min(W,H)`（預設 0.03）。
+3. 合併相近元件（同一圖形的筆畫／虛線黏回一塊）：gap `<= merge_px`（預設 3px）。
+4. 對每個 vision anchor box 取交集最大的元件，把框 snap 成該元件外框；
+   **僅在元件面積 / anchor 面積 ∈ [0.35, 2.5] 才採用**（避免 snap 到小點或跨元件大塊）。
+5. 座標轉回 0–1000 後寫回 `matching-pairs.json`（label / pairs 沿用 vision 結果）。
+
+腳本：workdir `refine_matching_boxes.py`（僅需 Pillow）
+
+```bash
+python3 refine_matching_boxes.py \
+  --matching out/matching-pairs.json \
+  --images ./match_pngs \
+  --out out/matching-pairs.refined.json     # 或用 --image-url-prefix https://.../preview-img
+```
+
+**效果**：對「元件彼此分離」的圖形題（`EMA1509002747`、`EMA1509004744`、`EMA1509002786`、`EMA1509002878`、`EMA1509004463`）
+可得到貼緊、不含點與鄰居的裁切；文字題不受影響（預覽用 HTML 文字）。
+**限制**：相鄰元件互相黏在一起（如 `EMA1509004859`/`EMA1509004863` 的 ①②③④ 柱狀圖）連通元件無法分離；
+`EMA1509004903` 抽取資料本身 a∩b 重疊，仍退回裁切預覽。
