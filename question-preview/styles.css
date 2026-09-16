@@ -108,6 +108,10 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .app-match-lr .match-dot { left: auto; top: 50%; transform: translateY(-50%); }
 .app-match-lr .match-left .match-dot { right: -15px; }
 .app-match-lr .match-right .match-dot { left: -15px; }
+/* 鏈式版面（layout:"chain"；節點可同時是來源與目標，兩側各一連接點） */
+.app-match-html.app-match-chain { display: flex; flex-direction: row; gap: 48px; align-items: center; }
+.app-match-chain .match-dot-l { left: -15px; right: auto; top: 50%; transform: translateY(-50%); }
+.app-match-chain .match-dot-r { right: -15px; left: auto; top: 50%; transform: translateY(-50%); }
 .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 2px; line-height: 1.05; font-size: .95em; }
 .frac .num { border-bottom: 1.4px solid currentColor; padding: 0 3px; }
 .frac .den { padding: 0 3px; }

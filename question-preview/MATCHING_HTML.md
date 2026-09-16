@@ -25,7 +25,7 @@
 
 - `box` 為 0–1000 正規化（左上到右下）。
 - `kind`：`text`（HTML 文字；`a/b` 自動轉堆疊分數）或 `figure`（原圖裁切）。
-- `layout`：`tb` 或 `lr`。
+- `layout`：`tb`（上下）、`lr`（左右）或 `chain`（三欄以上；節點可同時是來源與目標，需搭配每 box 的 `col`，`pairs` 表 `a`→`b` 方向）。
 - `review`：品質閘結果；`needs_review` 會列出原因（`a_b_overlap`、`box5_blank`…）。
 - 站台 runtime 讀 `preview-matching`（`resource-files /preview/matching-pairs.json`）。
 
@@ -58,7 +58,8 @@ python3 matching_pipeline.py --all --extract --source out/knsh-math5-preview.jso
   - 重疊（同一索引同時在 a/b）→ 抽取不可靠 → 退回原圖裁切預覽（`.app-canvas` 同色框）。
 - 逐 box 依 `kind` 決定內容（`text` → HTML、`figure` → 裁切）；每顆按鈕含 `.match-dot`。
 - **尺寸還原**：figure 的 `aspect-ratio` 用原圖像素比 `(dx·W)/(dy·H)`；同一排/欄的欄寬依原圖像素寬等比例、共用同一 scale（短側補空白）。
-- `layout:"lr"` → 左欄（`.match-left`）／右欄（`.match-right`）；否則 `.match-top` / `.match-bottom`。
+- `layout:"lr"` → 左欄（`.match-left`）／右欄（`.match-right`）；`tb` → `.match-top` / `.match-bottom`。
+- `layout:"chain"` → 依 `box.col` 分欄；每顆按鈕左右各一連接點，`pairs` 的 `a` 連到 `b`（例：名稱→實物→透視圖）。`a∩b` 重疊視為正常、不觸發退回預覽。
 
 ## 4. 互動
 

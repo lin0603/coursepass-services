@@ -54,7 +54,7 @@ function fracHtml(label) {
 // 按鈕內容型別由資料決定（box.kind）：'text' 純 HTML 文字（分數用堆疊）、'figure' 原圖裁切。
 function kindOf(b) { return b && b.kind === 'text' ? 'text' : 'figure'; }
 
-function matchNodeHtml(m, b, i, side, play, pct) {
+function matchNodeHtml(m, b, i, side, play, pct, chain) {
   const sel = play.selected === i ? ' selected' : '';
   const fig = kindOf(b) === 'figure';
   const [y1, x1, y2, x2] = b.box;
@@ -67,7 +67,8 @@ function matchNodeHtml(m, b, i, side, play, pct) {
   if (fig) parts.push(cropBg(m.image, b.box));
   const style = parts.length ? ` style="${parts.join(';')}"` : '';
   const inner = fig ? '' : fracHtml(b.label || '');
-  return `<button type="button" class="app-match-tile match-node match-${side}${fig ? ' match-fig' : ''}${sel}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}"${style}>${inner}<span class="match-dot"></span></button>`;
+  const dots = chain ? '<span class="match-dot match-dot-l"></span><span class="match-dot match-dot-r"></span>' : '<span class="match-dot"></span>';
+  return `<button type="button" class="app-match-tile match-node match-${side}${fig ? ' match-fig' : ''}${sel}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}"${style}>${inner}${dots}</button>`;
 }
 
 // 連線以量測後的像素座標繪製（純 HTML 按鍵的排版非固定比例）
@@ -81,17 +82,21 @@ function drawMatchLines() {
     svg.setAttribute('preserveAspectRatio', 'none');
     const play = state.matchingPlay[board.dataset.matchId] || { lines: [] };
     const layout = (state.matching[board.dataset.matchId] || {}).layout || 'tb';
+    const isChain = layout === 'chain' || board.classList.contains('app-match-chain');
     const aSide = layout === 'lr' ? 'left' : 'top';
     const bSide = layout === 'lr' ? 'right' : 'bottom';
-    const center = (side, index) => {
-      const dot = board.querySelector(`.match-${side} .app-match-tile[data-match-index="${index}"] .match-dot`);
+    const dotSel = (index, side, which) => (isChain
+      ? `.app-match-tile[data-match-index="${index}"] .match-dot-${which}`
+      : `.match-${side} .app-match-tile[data-match-index="${index}"] .match-dot`);
+    const center = (sel) => {
+      const dot = board.querySelector(sel);
       if (!dot) return null;
       const r = dot.getBoundingClientRect();
       return { x: r.left - rect.left + r.width / 2, y: r.top - rect.top + r.height / 2 };
     };
     svg.innerHTML = (play.lines || []).map((line) => {
-      const a = center(aSide, line.a);
-      const b = center(bSide, line.b);
+      const a = center(dotSel(line.a, aSide, 'r'));
+      const b = center(dotSel(line.b, bSide, 'l'));
       if (!a || !b) return '';
       return `<line class="match-line ${line.correct ? 'correct' : 'wrong'}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
     }).join('');
@@ -121,7 +126,25 @@ function matchingView(it) {
   (m.pairs || []).forEach((p, gi) => { group['a' + p.a] = gi; group['b' + p.b] = gi; });
   const left = new Set((m.pairs || []).map((p) => p.a));
   const right = new Set((m.pairs || []).map((p) => p.b));
-  // 同一索引同時出現在上下排＝抽取資料不可靠，退回原圖裁切預覽
+  const layout = m.layout || 'tb';
+  const pw = (i) => { const [, x1, , x2] = m.boxes[i].box; return Math.max(1, x2 - x1) / 1000 * W; };
+  // 鏈式（三欄以上；節點可同時是來源與目標）
+  if (layout === 'chain') {
+    const colsMap = {};
+    m.boxes.forEach((b, i) => { const c = b.col ?? 0; (colsMap[c] = colsMap[c] || []).push(i); });
+    const colKeys = Object.keys(colsMap).map(Number).sort((a, b) => a - b);
+    const colHtml = colKeys.map((c) => {
+      const idxs = colsMap[c];
+      const figs = idxs.filter((i) => kindOf(m.boxes[i]) === 'figure');
+      const maxW = Math.max(1, ...figs.map(pw));
+      const nodes = idxs.map((i) => matchNodeHtml(m, m.boxes[i], i, 'chain', play, kindOf(m.boxes[i]) === 'figure' ? pw(i) / maxW * 100 : null, true)).join('');
+      return `<div class="match-col" style="flex:${maxW.toFixed(2)} 1 0">${nodes}</div>`;
+    }).join('');
+    return `<div class="app-match-board app-match-html app-match-chain" data-match-id="${esc(it.id)}">${colHtml}<svg class="match-lines" aria-hidden="true"></svg></div>
+      <p class="app-match-help">先選一個元件，再選要連接的元件。${play.selected === null ? '' : '請選擇要連接的元件。'}</p>
+      <p class="app-correct app-match-result">${matchingResult(m, play)}</p>`;
+  }
+  // 同一索引同時出現在 a/b＝抽取資料不可靠，退回原圖裁切預覽
   const interactive = right.size > 0 && [...left].every((i) => !right.has(i));
   if (!interactive) {
     const tiles = m.boxes.map((b, i) => {
@@ -135,8 +158,6 @@ function matchingView(it) {
       <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
   }
   // 互動題：以 HTML 按鈕重畫（a 側在前、b 側在後；文字用 HTML、圖形用原圖裁切），連線量測後繪製
-  const layout = m.layout || 'tb';
-  const pw = (i) => { const [, x1, , x2] = m.boxes[i].box; return Math.max(1, x2 - x1) / 1000 * W; };
   const aIdx = m.boxes.map((_, i) => i).filter((i) => left.has(i));
   const bIdx = m.boxes.map((_, i) => i).filter((i) => right.has(i));
   const allFigure = (idx) => idx.length > 0 && idx.every((i) => kindOf(m.boxes[i]) === 'figure');
@@ -309,6 +330,23 @@ el.list.addEventListener('click', async (event) => {
     if (!m) return;
     const index = Number(matchTile.dataset.matchIndex);
     const play = state.matchingPlay[id] || { selected: null, lines: [] };
+    if (board.classList.contains('app-match-chain')) {
+      if (play.selected === null) {
+        play.selected = index;
+      } else if (play.selected === index) {
+        play.selected = null;
+      } else {
+        const sel = play.selected;
+        const pair = (m.pairs || []).find((p) => (p.a === sel && p.b === index) || (p.a === index && p.b === sel));
+        const src = pair ? pair.a : sel;
+        const dst = pair ? pair.b : index;
+        if (!(play.lines || []).some((l) => l.a === src && l.b === dst)) play.lines.push({ a: src, b: dst, correct: !!pair });
+        play.selected = null;
+      }
+      state.matchingPlay[id] = play;
+      render();
+      return;
+    }
     if (matchTile.closest('.match-top') || matchTile.closest('.match-left')) {
       play.selected = index;
     } else if ((matchTile.closest('.match-bottom') || matchTile.closest('.match-right')) && play.selected !== null) {
