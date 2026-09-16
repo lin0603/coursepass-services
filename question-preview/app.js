@@ -832,6 +832,7 @@ el.assignPanel.addEventListener('click', (e) => {
 
 // ---- 簡易登入（通行碼）----
 const loggedIn = () => localStorage.getItem('cp_pass') === '1';
+const isAdmin = () => localStorage.getItem('cp_admin') === '1';
 function showGate(show) { if (el.loginGate) el.loginGate.hidden = !show; }
 async function doLogin() {
   el.loginMsg.textContent = '登入中…';
@@ -842,13 +843,18 @@ async function doLogin() {
       body: JSON.stringify({ code: el.loginCode.value }),
     });
     const d = await res.json();
-    if (d.ok) { localStorage.setItem('cp_pass', '1'); showGate(false); el.loginMsg.textContent = ''; if (!state.me) el.meSelect.focus(); }
+    if (d.ok) {
+      localStorage.setItem('cp_pass', '1');
+      if (d.admin) localStorage.setItem('cp_admin', '1'); else localStorage.removeItem('cp_admin');
+      syncSourceLink();
+      showGate(false); el.loginMsg.textContent = ''; if (!state.me) el.meSelect.focus();
+    }
     else el.loginMsg.textContent = '通行碼錯誤';
   } catch (e) { el.loginMsg.textContent = '登入失敗：' + e.message; }
 }
 if (el.loginBtn) el.loginBtn.addEventListener('click', doLogin);
 if (el.loginCode) el.loginCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
-if (el.logoutBtn) el.logoutBtn.addEventListener('click', () => { localStorage.removeItem('cp_pass'); location.reload(); });
+if (el.logoutBtn) el.logoutBtn.addEventListener('click', () => { localStorage.removeItem('cp_pass'); localStorage.removeItem('cp_admin'); location.reload(); });
 
 const params = new URLSearchParams(location.search);
 const metaData = document.querySelector('meta[name="preview-data"]');
@@ -874,8 +880,13 @@ function applyCourseMeta(course) {
   document.title = `${course.name || ''} · 題目審查`;
   if (el.sourceLink && course.archiveSlug) {
     el.sourceLink.href = `${RESOURCE_INDEX}/?archive=${encodeURIComponent(course.archiveSlug)}`;
-    el.sourceLink.hidden = false;
   }
+  syncSourceLink();
+}
+// 「來源資源包」僅管理者可見（需管理者密碼）
+function syncSourceLink() {
+  if (!el.sourceLink) return;
+  el.sourceLink.hidden = !(loggedIn() && isAdmin());
 }
 function renderCourseSelector(courses, course) {
   if (!el.courseSelect) return;

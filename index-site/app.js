@@ -315,20 +315,25 @@ const COURSES_URL = (document.querySelector('meta[name="courses-url"]') || {}).c
 const REVIEW_SITE = (document.querySelector('meta[name="review-site"]') || {}).content || '';
 const H = { Authorization: `Bearer ${TOKEN}` };
 const loggedIn = () => localStorage.getItem('cp_pass') === '1';
+const isAdmin = () => localStorage.getItem('cp_admin') === '1';
+function syncAdminUI() {
+  if (el.navBrowse) el.navBrowse.hidden = !isAdmin();
+}
 function showGate(show) { el.loginGate.hidden = !show; }
 async function doLogin() {
   el.loginMsg.textContent = '登入中…';
   try {
     const d = await (await fetch(`${API}/v1/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...H }, body: JSON.stringify({ code: el.loginCode.value }) })).json();
-    if (d.ok) { localStorage.setItem('cp_pass', '1'); showGate(false); start(); } else el.loginMsg.textContent = '通行碼錯誤';
+    if (d.ok) { localStorage.setItem('cp_pass', '1'); if (d.admin) localStorage.setItem('cp_admin', '1'); else localStorage.removeItem('cp_admin'); syncAdminUI(); showGate(false); start(); } else el.loginMsg.textContent = '通行碼錯誤';
   } catch (e) { el.loginMsg.textContent = '登入失敗：' + e.message; }
 }
 el.loginBtn.addEventListener('click', doLogin);
 el.loginCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
-el.logoutBtn.addEventListener('click', () => { localStorage.removeItem('cp_pass'); location.reload(); });
+el.logoutBtn.addEventListener('click', () => { localStorage.removeItem('cp_pass'); localStorage.removeItem('cp_admin'); location.reload(); });
 
 let browserInited = false;
 function showView(which, archiveSlug) {
+  if (which === 'browse' && !isAdmin()) which = 'dash';
   el.dash.hidden = which !== 'dash';
   el.browser.hidden = which !== 'browse';
   el.navDash.classList.toggle('on', which === 'dash');
@@ -377,7 +382,7 @@ function renderResRows() {
       <td>${escapeHtml(String(r.subject || ''))}</td>
       <td><div class="chips">${chips}</div><div class="cpct">${n}/${RES.keys.length}（${cpct}%）</div></td>
       <td>${qn ? `${done} / ${qn}（${pct}%）` : '<span class="muted">—</span>'}</td>
-      <td class="act">${entry}${r.archiveSlug ? ` <button class="mini-btn" data-archive="${escapeHtml(r.archiveSlug)}">資源包</button>` : ''}</td>
+      <td class="act">${entry}${(r.archiveSlug && isAdmin()) ? ` <button class="mini-btn" data-archive="${escapeHtml(r.archiveSlug)}">資源包</button>` : ''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="muted">無符合資源</td></tr>';
   document.querySelectorAll('#resRows [data-archive]').forEach((b) => b.addEventListener('click', () => showView('browse', b.dataset.archive)));
@@ -413,7 +418,8 @@ async function renderDash() {
 }
 
 async function start() {
-  if (params.get('archive')) { showView('browse'); return; }
+  syncAdminUI();
+  if (params.get('archive') && isAdmin()) { showView('browse'); return; }
   showView('dash');
   await renderDash();
 }
@@ -424,5 +430,6 @@ async function start() {
     if (g.gate && !loggedIn()) { showGate(true); return; }
   } catch { /* API 掛掉時不擋 */ }
   showGate(false);
+  syncAdminUI();
   start();
 })();

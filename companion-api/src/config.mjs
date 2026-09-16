@@ -18,6 +18,8 @@ config.geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 // 審題站簡易登入（通行碼）；未設＝不啟用
 config.previewPasscode = process.env.PREVIEW_PASSCODE || '';
+// 管理者密碼（可看資源索引／來源資源包）；未設＝沿用通行碼
+config.adminPasscode = process.env.ADMIN_PASSCODE || '';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 export const dbPath = path.join(config.dataDir, 'companion.sqlite');

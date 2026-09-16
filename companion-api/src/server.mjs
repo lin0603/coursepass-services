@@ -26,11 +26,15 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 // 審題站簡易登入：驗通行碼（未設 PREVIEW_PASSCODE 則不啟用）
-app.get('/v1/login', (_req, res) => res.json({ gate: Boolean(config.previewPasscode) }));
+app.get('/v1/login', (_req, res) => res.json({ gate: Boolean(config.previewPasscode || config.adminPasscode) }));
 app.post('/v1/login', (req, res) => {
-  const expected = config.previewPasscode;
-  if (!expected) return res.json({ ok: true, gate: false });
-  res.json({ ok: String((req.body || {}).code || '') === expected, gate: true });
+  const code = String((req.body || {}).code || '');
+  const user = config.previewPasscode;
+  const admin = config.adminPasscode;
+  if (!user && !admin) return res.json({ ok: true, gate: false, admin: true });
+  const okAdmin = Boolean(admin) && code === admin;
+  const okUser = Boolean(user) && code === user;
+  res.json({ ok: okAdmin || okUser, gate: true, admin: okAdmin || (!user && okAdmin) });
 });
 app.get('/version', asyncHandler(async (_req, res) => {
   res.json({ service: 'companion-api', version: '1.0.0', knowledge: await knowledge.version() });
