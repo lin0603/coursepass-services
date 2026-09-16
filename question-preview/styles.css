@@ -57,8 +57,21 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .app-btn { display: flex; gap: 8px; align-items: center; width: 100%; min-height: 46px; padding: 10px 14px; border: 2px solid #bed4d7; border-radius: 14px; background: #fff; color: #111827; font: inherit; font-size: 16px; text-align: left; }
 .app-btn b { flex: none; color: #6b7280; }
 .app-btn span { display: inline-flex; align-items: center; gap: .12em; }
+.app-btn { cursor: pointer; }
+.app-btn[disabled] { cursor: default; }
 .app-btn.correct { border-color: #087e8b; background: #e4f3ee; color: #087e8b; font-weight: 700; }
 .app-btn.correct b { color: #087e8b; }
+.app-btn.wrong { border-color: #d44b4b; background: #fbeceb; color: #a6403b; font-weight: 700; }
+.app-btn.wrong b { color: #a6403b; }
+.app-feedback { margin: 8px 0 0; font-weight: 700; color: #236251; }
+.app-feedback.bad { color: #a6403b; }
+.app-fill1 { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.app-fill-input { flex: 1; padding: 0 12px; font: inherit; }
+.app-check { min-height: 42px; padding: 0 16px; border: 0; border-radius: 10px; background: #087e8b; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.mode-switch { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.mode-label { font-size: 12px; color: #8b93a5; }
+.mode-btn { min-height: 34px; padding: 4px 14px; border: 1px solid #2a3140; border-radius: 8px; background: #0f1218; color: #cbd5d1; font: inherit; font-weight: 600; cursor: pointer; }
+.mode-btn.on { background: #087e8b; border-color: #087e8b; color: #fff; }
 .app-match { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .app-match > div { display: grid; gap: 8px; align-content: start; }
 .app-fill { display: grid; grid-auto-flow: column; gap: 8px; margin: 6px 0; }

@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, explanations: {}, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, explanations: {}, play: {}, appMode: 'quiz', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   search: document.getElementById('search'),
@@ -96,8 +96,11 @@ function drawMatchLines() {
     if (!rect.width || !rect.height) return;
     svg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
     svg.setAttribute('preserveAspectRatio', 'none');
-    const play = state.matchingPlay[board.dataset.matchId] || { lines: [] };
-    const layout = (state.matching[board.dataset.matchId] || {}).layout || 'tb';
+    const boardMatch = state.matching[board.dataset.matchId] || {};
+    const play = (state.appMode === 'answer')
+      ? { lines: (boardMatch.pairs || []).map((p) => ({ a: p.a, b: p.b, correct: true })) }
+      : (state.matchingPlay[board.dataset.matchId] || { lines: [] });
+    const layout = boardMatch.layout || 'tb';
     const isChain = layout === 'chain' || board.classList.contains('app-match-chain');
     const aSide = layout === 'lr' ? 'left' : 'top';
     const bSide = layout === 'lr' ? 'right' : 'bottom';
@@ -137,7 +140,10 @@ function matchingView(it) {
   }
   const W = m.width || 1000;
   const H = m.height || 1000;
-  const play = state.matchingPlay[it.id] || { selected: null, lines: [] };
+  const reveal = state.appMode === 'answer';
+  const play = reveal
+    ? { selected: null, lines: (m.pairs || []).map((p) => ({ a: p.a, b: p.b, correct: true })) }
+    : (state.matchingPlay[it.id] || { selected: null, lines: [] });
   const group = {};
   (m.pairs || []).forEach((p, gi) => { group['a' + p.a] = gi; group['b' + p.b] = gi; });
   const left = new Set((m.pairs || []).map((p) => p.a));
@@ -218,6 +224,40 @@ function matchingView(it) {
     <p class="app-correct app-match-result">${matchingResult(m, play)}</p>`;
 }
 
+function normalizeAnswer(s) {
+  return String(s ?? '').replace(/\s+/g, '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248)).replace(/[，,]/g, '');
+}
+
+// 點選題（測驗模式可點、有回饋；解答模式顯示正解）
+function choiceHtml(it, a, quiz) {
+  const play = state.play[it.id] || {};
+  const answered = play.choice != null;
+  const opts = (a.options || []).map((_, i) => {
+    let cls = '';
+    let dis = !quiz;
+    if (quiz && answered) { if (i === a.correctIndex) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; dis = true; }
+    else if (!quiz && i === a.correctIndex) cls = 'correct';
+    return `<button type="button" class="app-btn ${cls}" data-choice="${i}" data-qid="${esc(it.id)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</span></button>`;
+  }).join('');
+  let fb = '';
+  if (quiz && answered) {
+    const ok = play.choice === a.correctIndex;
+    fb = `<p class="app-feedback${ok ? '' : ' bad'}">${ok ? '答對了！' : `答錯了，正解是 ${LETTERS[a.correctIndex]}`}</p>`;
+  }
+  return `<div class="app-opts">${opts}</div>${fb}`;
+}
+
+// 填空題（測驗模式輸入＋檢查；解答模式顯示可接受答案）
+function fillHtml(it, a, quiz) {
+  const play = state.play[it.id] || {};
+  const accept = a.accept || [];
+  if (!quiz) return `<p class="app-correct">答案：${esc(accept.join('、'))}</p>`;
+  const val = play.fill ?? '';
+  const checked = play.fillChecked;
+  const fb = checked ? `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${esc(accept.join('、'))}）`}</p>` : '';
+  return `<div class="app-fill1"><input class="app-input app-fill-input" data-qid="${esc(it.id)}" value="${esc(val)}" placeholder="輸入答案"><button type="button" class="app-check" data-qid="${esc(it.id)}">檢查</button></div>${fb}`;
+}
+
 // App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
 function appViewHtml(it) {
   const a = state.appdata[it.id];
@@ -226,15 +266,17 @@ function appViewHtml(it) {
     return `<section class="app-view"><div class="app-head">App 呈現</div>
       <div class="app-phone"><div class="app-prompt">${prompt}</div><p class="app-none">未進入 App（不在活動集）</p></div></section>`;
   }
+  const quiz = state.appMode !== 'answer';
   const label = a.mode === 'choice' ? `點選題 · ${a.options.length} 選項 · ${esc(a.generator || '')}` : `直映 · ${esc(a.type)} · ${esc(a.generator || 'direct')}`;
   let body = '';
   if (a.mode === 'choice' || a.type === 'choice') {
-    const opts = (a.options || []).map((_, i) => `<button type="button" class="app-btn ${i === a.correctIndex ? 'correct' : ''}" disabled><b>${LETTERS[i]}</b><span>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</span></button>`).join('');
-    body = `<div class="app-opts">${opts}</div>`;
+    body = choiceHtml(it, a, quiz);
   } else if (a.type === 'matching') {
     body = matchingView(it);
   } else if (a.accept && a.accept.length) {
-    body = `<div class="app-fill">${a.accept.map(() => '<span class="app-input"></span>').join('')}</div><p class="app-correct">接受：${esc(a.accept.join('、'))}</p>`;
+    body = fillHtml(it, a, quiz);
+  } else if (quiz) {
+    body = `<p class="app-none">（測驗模式：此題型無互動，切到解答模式看答案）</p>`;
   } else {
     body = `<p class="app-correct">答案：${esc(String(a.answer ?? ''))}</p>`;
   }
@@ -397,6 +439,7 @@ el.list.addEventListener('click', async (event) => {
     const id = board && board.dataset.matchId;
     const m = id && state.matching[id];
     if (!m) return;
+    if (state.appMode === 'answer') return; // 解答模式不互動
     const index = Number(matchTile.dataset.matchIndex);
     const play = state.matchingPlay[id] || { selected: null, lines: [] };
     if (board.classList.contains('app-match-chain')) {
@@ -426,6 +469,24 @@ el.list.addEventListener('click', async (event) => {
       play.selected = null;
     }
     state.matchingPlay[id] = play;
+    render();
+    return;
+  }
+  const choiceBtn = event.target.closest('.app-btn[data-choice]');
+  if (choiceBtn) {
+    if (state.appMode === 'answer') return;
+    const qid = choiceBtn.dataset.qid;
+    state.play[qid] = { ...(state.play[qid] || {}), choice: Number(choiceBtn.dataset.choice) };
+    render();
+    return;
+  }
+  const checkBtn = event.target.closest('.app-check');
+  if (checkBtn) {
+    const qid = checkBtn.dataset.qid;
+    const a = state.appdata[qid] || {};
+    const val = normalizeAnswer((state.play[qid] || {}).fill || '');
+    const ok = (a.accept || []).some((x) => normalizeAnswer(x) === val);
+    state.play[qid] = { ...(state.play[qid] || {}), fillChecked: true, fillOk: ok };
     render();
     return;
   }
@@ -513,6 +574,22 @@ el.list.addEventListener('click', async (event) => {
   }
 });
 
+el.list.addEventListener('input', (event) => {
+  const inp = event.target.closest('.app-fill-input');
+  if (!inp) return;
+  const qid = inp.dataset.qid;
+  state.play[qid] = { fill: inp.value };
+});
+
+el.list.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  const inp = event.target.closest('.app-fill-input');
+  if (!inp) return;
+  event.preventDefault();
+  const btn = inp.closest('.app-view') && inp.closest('.app-view').querySelector('.app-check');
+  if (btn) btn.click();
+});
+
 el.list.addEventListener('focusout', async (event) => {
   const note = event.target.closest('.rv-note');
   if (!note) return;
@@ -572,5 +649,10 @@ Promise.all([
   el.fStatus.addEventListener('change', (e) => { state.status = e.target.value; state.limit = 100; render(); });
   el.fReview.addEventListener('change', (e) => { state.review = e.target.value; state.limit = 100; render(); });
   el.fImage.addEventListener('change', (e) => { state.imageOnly = e.target.checked; state.limit = 100; render(); });
+  document.querySelectorAll('.mode-switch .mode-btn').forEach((btn) => btn.addEventListener('click', () => {
+    state.appMode = btn.dataset.mode;
+    document.querySelectorAll('.mode-switch .mode-btn').forEach((x) => x.classList.toggle('on', x === btn));
+    render();
+  }));
   render();
 }).catch((e) => { el.subtitle.textContent = '載入失敗：' + e.message; });
