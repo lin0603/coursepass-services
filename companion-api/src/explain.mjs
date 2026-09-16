@@ -11,6 +11,15 @@ const SYSTEM_PROMPT = [
 
 const cache = new Map(); // key -> explanation（省成本；重啟即清）
 
+function typeHint(type) {
+  switch (type) {
+    case 'matching': return '這是「連連看」：請先說明判斷依據，再逐組列出正確配對（左→右）。';
+    case 'choice': return '這是「選擇題」：請說明每個選項為什麼對或錯，最後指出正解。';
+    case 'fill_blank': return '這是「填空／計算題」：請說明算法與為什麼得到這個答案。';
+    default: return '';
+  }
+}
+
 function buildUserText({ prompt, answer, type, options }) {
   const lines = [`題目：${prompt || ''}`];
   if (Array.isArray(options) && options.length) {
@@ -33,8 +42,9 @@ export async function explainQuestion(input = {}) {
   const key = `${config.geminiModel}\u0000${text}`;
   if (cache.has(key)) return { model: config.geminiModel, cached: true, explanation: cache.get(key) };
 
+  const hint = typeHint(input.type);
   const body = {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    systemInstruction: { parts: [{ text: hint ? `${SYSTEM_PROMPT}\n${hint}` : SYSTEM_PROMPT }] },
     contents: [{ role: 'user', parts: [{ text }] }],
     generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
   };

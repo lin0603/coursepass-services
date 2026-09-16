@@ -17,6 +17,7 @@ const el = {
   list: document.getElementById('list'),
   more: document.getElementById('more'),
 };
+let moreObserver = null;
 const LETTERS = 'ABCDEFGH';
 const REVIEW_LABELS = { '': '未設定', approved: '合格', adjust: '需調整', rejected: '不採用', pending: '待審' };
 const deFull = (s) => String(s ?? '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248));
@@ -285,6 +286,9 @@ function appViewHtml(it) {
     body = choiceHtml(it, a, quiz);
   } else if (a.type === 'matching') {
     body = matchingView(it);
+  } else if (a.type === 'listening' || a.type === 'word_order' || a.type === 'speaking') {
+    body = `<p class="app-none">App 尚未支援此題型（${esc(a.type)}）</p>`
+      + ((!quiz && a.answer) ? `<p class="app-correct">答案：${esc(String(a.answer))}</p>` : '');
   } else if (a.accept && a.accept.length) {
     body = fillHtml(it, a, quiz);
   } else if (quiz) {
@@ -296,8 +300,11 @@ function appViewHtml(it) {
   const isMatching = a.type === 'matching';
   const promptBlock = isMatching ? '' : `<div class="app-prompt">${prompt}</div>`;
   const fig = (!isMatching && a.figureUrl) ? `<div class="app-fig"><img loading="lazy" src="${esc(a.figureUrl)}" alt="題圖"></div>` : '';
+  // 解答模式：附上 AI 解題（若有）
+  const expl = (!quiz && state.explanations[it.id])
+    ? `<div class="app-expl"><b>AI 解題</b><br>${esc(state.explanations[it.id]).replace(/\n/g, '<br>')}</div>` : '';
   return `<section class="app-view"><div class="app-head">App 呈現 <span class="app-label">${label}</span></div>
-    <div class="app-phone">${promptBlock}${fig}${body}</div></section>`;
+    <div class="app-phone">${promptBlock}${fig}${body}${expl}</div></section>`;
 }
 
 function reviewHtml(it) {
@@ -324,6 +331,8 @@ function reviewHtml(it) {
     </div>
     <textarea class="rv-note" rows="2" placeholder="調整註解／原因（會存到雲端）">${esc(r.note || '')}</textarea>
     ${othersHtml(it.id)}
+    <button type="button" class="rv-btn rv-history">查看審查歷史</button>
+    <div class="rv-history-box" hidden></div>
   </section>`;
 }
 
@@ -418,9 +427,14 @@ function render() {
   el.more.innerHTML = '';
   if (list.length > state.limit) {
     const b = document.createElement('button');
-    b.textContent = `顯示更多（還有 ${(list.length - state.limit).toLocaleString()} 題）`;
+    b.textContent = `載入更多（還有 ${(list.length - state.limit).toLocaleString()} 題）`;
     b.onclick = () => { state.limit += 100; render(); };
     el.more.appendChild(b);
+    if (moreObserver) moreObserver.disconnect();
+    moreObserver = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) { state.limit += 100; render(); } }, { rootMargin: '500px' });
+    moreObserver.observe(b);
+  } else if (moreObserver) {
+    moreObserver.disconnect(); moreObserver = null;
   }
   el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
 }
@@ -500,6 +514,22 @@ el.list.addEventListener('click', async (event) => {
     }
     state.matchingPlay[id] = play;
     render();
+    return;
+  }
+  const histBtn = event.target.closest('.rv-history');
+  if (histBtn) {
+    const section = histBtn.closest('.review');
+    const id = section.dataset.id;
+    const box = section.querySelector('.rv-history-box');
+    if (!box.hidden) { box.hidden = true; return; }
+    box.hidden = false; box.textContent = '載入中…';
+    try {
+      const d = await (await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}/history`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
+      const items = d.items || [];
+      box.innerHTML = items.length
+        ? items.map((h) => `<div class="rv-hist">${esc((h.at || '').replace('T', ' ').slice(0, 16))}　${esc(h.reviewerName || h.reviewerId || '未署名')}　${REVIEW_LABELS[h.fromStatus || ''] || '未設定'} → ${REVIEW_LABELS[h.toStatus || ''] || '未設定'}${h.toType ? `　題型→${esc(typeLabel(h.toType))}` : ''}${h.note ? `　「${esc(h.note)}」` : ''}</div>`).join('')
+        : '（尚無歷史）';
+    } catch (e) { box.textContent = '失敗：' + e.message; }
     return;
   }
   const choiceBtn = event.target.closest('.app-btn[data-choice]');
@@ -660,10 +690,22 @@ async function loadProgress() {
   if (!box) return;
   try {
     const d = await (await fetch(`${REVIEWS_API}/v1/review-progress`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
-    box.textContent = (d.items || []).length
-      ? '進度：' + d.items.map((p) => `${p.reviewerName || p.reviewerId} ${p.done || 0}/${p.total}`).join('　')
+    const items = d.items || [];
+    box.innerHTML = items.length
+      ? `<b>審查進度</b>${items.map((p) => { const total = p.total || 0; const done = p.done || 0; const pct = total ? Math.round(done / total * 100) : 0; return `<div class="asg-prow">${esc(p.reviewerName || p.reviewerId)}　${done} / ${total}（${pct}%）</div>`; }).join('')}`
       : '尚無指派';
   } catch { box.textContent = ''; }
+}
+async function exportCsv() {
+  try {
+    const res = await fetch(`${REVIEWS_API}/v1/reviews/export?format=csv`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'reviews-export.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('匯出失敗：' + e.message); }
 }
 function renderAssignPanel() {
   if (el.assignPanel.hidden) return;
@@ -674,7 +716,7 @@ function renderAssignPanel() {
   el.assignPanel.innerHTML = `<h3>審查分配（雙審：每題 2 位不同審查人）</h3>
     <p class="hint">題池＝目前篩選結果，共 <b>${pool.length}</b> 題（建立時會排除已指派者）。填各人題數（可不相等），系統兩兩配對；「預覽」不會寫入。</p>
     ${rows}
-    <div class="asg-row"><button type="button" class="mini-btn" id="asgPreview">預覽</button><button type="button" class="mini-btn on" id="asgCreate">建立指派</button><span class="asg-state" id="asgState"></span></div>
+    <div class="asg-row"><button type="button" class="mini-btn" id="asgPreview">預覽</button><button type="button" class="mini-btn on" id="asgCreate">建立指派</button><button type="button" class="mini-btn" id="asgExport">匯出 CSV</button><span class="asg-state" id="asgState"></span></div>
     <div class="asg-progress" id="asgProgress"></div>`;
   loadProgress();
 }
@@ -725,6 +767,7 @@ el.mineOnly.addEventListener('change', (e) => { state.mineOnly = e.target.checke
 el.assignPanel.addEventListener('click', (e) => {
   if (e.target.id === 'asgPreview') runAssign(true);
   if (e.target.id === 'asgCreate') runAssign(false);
+  if (e.target.id === 'asgExport') exportCsv();
 });
 
 const params = new URLSearchParams(location.search);

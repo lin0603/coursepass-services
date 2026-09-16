@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS question_reviews (
 CREATE INDEX IF NOT EXISTS ix_assign_reviewer ON assignments(reviewerId, status);
 CREATE INDEX IF NOT EXISTS ix_assign_question ON assignments(sourceQuestionId);
 CREATE INDEX IF NOT EXISTS ix_qreview_question ON question_reviews(sourceQuestionId);
+CREATE TABLE IF NOT EXISTS review_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, sourceQuestionId TEXT, reviewerId TEXT, reviewerName TEXT,
+  fromStatus TEXT, toStatus TEXT, fromType TEXT, toType TEXT, typeMismatch INTEGER, note TEXT, at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_rhist_question ON review_history(sourceQuestionId);
 CREATE INDEX IF NOT EXISTS ix_answers_learner ON answers(learnerId, createdAt);
 CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWrongAt);
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
@@ -224,10 +229,33 @@ export const store = {
                 ON CONFLICT(sourceQuestionId, reviewerId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, typeMismatch=excluded.typeMismatch, updatedAt=excluded.updatedAt`)
       .run(row.sourceQuestionId, row.reviewerId, row.nodeId, row.status, row.note, row.type, row.typeMismatch, row.updatedAt);
     if (reviewerId) this.markAssignmentDone(sourceQuestionId, reviewerId);
+    const changed = !existing
+      || String(existing.status ?? '') !== String(row.status ?? '')
+      || String(existing.type ?? '') !== String(row.type ?? '')
+      || !!existing.typeMismatch !== !!row.typeMismatch
+      || String(existing.note ?? '') !== String(row.note ?? '');
+    if (changed) this.logReviewHistory({ sourceQuestionId, reviewerId, from: existing, to: row });
     return { ...row, typeMismatch: !!row.typeMismatch };
+  },
+  logReviewHistory({ sourceQuestionId, reviewerId, from, to }) {
+    const name = (this.getReviewer(reviewerId) || {}).name || reviewerId || '';
+    db.prepare(`INSERT INTO review_history (sourceQuestionId, reviewerId, reviewerName, fromStatus, toStatus, fromType, toType, typeMismatch, note, at)
+                VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(sourceQuestionId, reviewerId || '', name, from ? from.status : null, to.status, from ? from.type : null, to.type, to.typeMismatch ? 1 : 0, to.note || '', now());
+  },
+  reviewHistory(sourceQuestionId) {
+    return db.prepare('SELECT sourceQuestionId, reviewerId, reviewerName, fromStatus, toStatus, fromType, toType, typeMismatch, note, at FROM review_history WHERE sourceQuestionId=? ORDER BY id DESC')
+      .all(sourceQuestionId).map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
   },
   deleteQuestionReview(sourceQuestionId, reviewerId) {
     return db.prepare('DELETE FROM question_reviews WHERE sourceQuestionId=? AND reviewerId=?').run(sourceQuestionId, reviewerId).changes > 0;
+  },
+  // 老師改選的題型（供活動組裝覆寫）
+  typeOverrides() {
+    const rows = db.prepare("SELECT sourceQuestionId, type FROM question_reviews WHERE type IS NOT NULL AND type <> '' ORDER BY updatedAt DESC").all();
+    const map = {};
+    for (const r of rows) if (!map[r.sourceQuestionId]) map[r.sourceQuestionId] = r.type;
+    return map;
   },
   // 給 AI 後續優化：結構化匯出（含審查人、意見、建議題型）
   exportReviews() {

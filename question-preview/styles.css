@@ -64,6 +64,7 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .app-btn.wrong { border-color: #d44b4b; background: #fbeceb; color: #a6403b; font-weight: 700; }
 .app-btn.wrong b { color: #a6403b; }
 .app-feedback { margin: 8px 0 0; font-weight: 700; color: #236251; }
+.app-expl { margin-top: 12px; padding: 10px; border: 1px dashed #cbd5d1; border-radius: 10px; background: #f7fafc; font-size: 14px; line-height: 1.7; color: #1f2b2a; }
 .app-feedback.bad { color: #a6403b; }
 .app-fill1 { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 .app-fill-input { flex: 1; padding: 0 12px; font: inherit; }
@@ -107,7 +108,11 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .asg-count { width: 90px; min-height: 32px; padding: 2px 8px; border-radius: 8px; border: 1px solid #2a3140; background: #0f1218; color: #e6e9ef; }
 .asg-state { font-size: 13px; color: #8b93a5; }
 .asg-progress { font-size: 13px; color: #cbd5d1; margin-top: 8px; }
+.asg-prow { margin-top: 3px; }
 /* 其他審查人意見 */
+.rv-history-box { margin-top: 8px; font-size: 12px; color: #42606a; border: 1px dashed #dbe5e2; border-radius: 8px; padding: 8px; }
+.rv-history-box[hidden] { display: none; }
+.rv-hist { margin-bottom: 4px; }
 .rv-others { margin-top: 10px; border-top: 1px dashed #dbe5e2; padding-top: 8px; }
 .rv-others .title { font-size: 12px; color: #8b93a5; margin-bottom: 6px; }
 .rv-other { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; font-size: 13px; }

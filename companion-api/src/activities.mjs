@@ -56,9 +56,10 @@ export function resolveCorrectIndex(options, rawOptions, answer) {
   return i >= 0 ? i : null;
 }
 
-export function toActivity(question, { llmMap } = {}) {
+export function toActivity(question, { llmMap, typeOverrides } = {}) {
   const rawType = String(question.questionType || '').trim();
-  let type = activityType(rawType);
+  const override = typeOverrides && typeOverrides[question.sourceQuestionId];
+  let type = override || activityType(rawType); // 老師在審題站改選的題型優先
   const rawOptions = Array.isArray(question.options) ? question.options : [];
   let options = rawOptions.map(optionText).filter((o) => o !== '');
   let answer = question.answer;

@@ -46,8 +46,8 @@ export function collectCandidates(questions, options = {}) {
   return out;
 }
 
-export function buildActivitySet(questions, { count = 10, pairCount = 4, llmMap } = {}) {
-  const candidates = collectCandidates(questions, { llmMap });
+export function buildActivitySet(questions, { count = 10, pairCount = 4, llmMap, typeOverrides } = {}) {
+  const candidates = collectCandidates(questions, { llmMap, typeOverrides });
 
   const nodeId = questions?.[0]?.primaryKnowledgeNodeId || null;
   const matching = buildMatching(questions, { pairCount });
