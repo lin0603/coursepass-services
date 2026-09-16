@@ -102,6 +102,12 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .match-top .match-dot { bottom: -15px; }
 .match-bottom .match-dot { top: -15px; }
 .match-fig { padding: 0; background-color: #fff; background-repeat: no-repeat; }
+/* 左右欄版面（layout:"lr"） */
+.app-match-html.app-match-lr { display: flex; flex-direction: row; gap: 56px; align-items: center; }
+.match-col { display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 2; align-items: center; min-width: 0; }
+.app-match-lr .match-dot { left: auto; top: 50%; transform: translateY(-50%); }
+.app-match-lr .match-left .match-dot { right: -15px; }
+.app-match-lr .match-right .match-dot { left: -15px; }
 .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 2px; line-height: 1.05; font-size: .95em; }
 .frac .num { border-bottom: 1.4px solid currentColor; padding: 0 3px; }
 .frac .den { padding: 0 3px; }

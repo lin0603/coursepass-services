@@ -51,37 +51,21 @@ function fracHtml(label) {
   return esc(label).replace(/(\d+)\s*\/\s*(\d+)/g, (_, n, d) => `<span class="frac"><span class="num">${n}</span><span class="den">${d}</span></span>`);
 }
 
-// 各題按鈕內容型別：'text' 純 HTML 文字（分數用堆疊）、'figure' 原圖裁切（背景）。
-// 未列出者預設 'figure'。可給 {top,bottom} 分別指定上下排（例：上圖下字）。
-const MATCHING_MODE = {
-  EMA1509000187: 'text',
-  EMA1509000635: 'text',
-  EMA1509000982: 'text',
-  EMA1509001028: 'text',
-  EMA1509004744: { top: 'figure', bottom: 'text' },
-  EMA1509004859: { top: 'figure', bottom: 'text' },
-  EMA1509004863: { top: 'figure', bottom: 'text' },
-  EMA1509002747: 'figure',
-  EMA1509002786: 'figure',
-  EMA1509002878: 'figure',
-  EMA1509004463: 'figure',
-  EMA1509004903: 'figure',
-};
-function modeOf(id, side) {
-  const c = MATCHING_MODE[id];
-  if (!c) return 'figure';
-  return typeof c === 'string' ? c : (c[side] || 'figure');
-}
+// 按鈕內容型別由資料決定（box.kind）：'text' 純 HTML 文字（分數用堆疊）、'figure' 原圖裁切。
+function kindOf(b) { return b && b.kind === 'text' ? 'text' : 'figure'; }
 
-function matchNodeHtml(m, id, b, i, side, play) {
+function matchNodeHtml(m, b, i, side, play, pct) {
   const sel = play.selected === i ? ' selected' : '';
-  const mode = modeOf(id, side);
+  const fig = kindOf(b) === 'figure';
   const [y1, x1, y2, x2] = b.box;
-  const fig = mode === 'figure';
   // 比例需用原圖像素（正規化 0–1000 在 x/y 兩軸不同尺度，直接 dx/dy 會變形）
   const dx = Math.max(1, x2 - x1) * (m.width || 1000);
   const dy = Math.max(1, y2 - y1) * (m.height || 1000);
-  const style = fig ? ` style="aspect-ratio:${dx} / ${dy};${cropBg(m.image, b.box)}"` : '';
+  const parts = [];
+  if (fig) parts.push(`aspect-ratio:${dx} / ${dy}`);
+  if (pct != null) parts.push(`width:${pct.toFixed(2)}%`);
+  if (fig) parts.push(cropBg(m.image, b.box));
+  const style = parts.length ? ` style="${parts.join(';')}"` : '';
   const inner = fig ? '' : fracHtml(b.label || '');
   return `<button type="button" class="app-match-tile match-node match-${side}${fig ? ' match-fig' : ''}${sel}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}"${style}>${inner}<span class="match-dot"></span></button>`;
 }
@@ -96,6 +80,9 @@ function drawMatchLines() {
     svg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
     svg.setAttribute('preserveAspectRatio', 'none');
     const play = state.matchingPlay[board.dataset.matchId] || { lines: [] };
+    const layout = (state.matching[board.dataset.matchId] || {}).layout || 'tb';
+    const aSide = layout === 'lr' ? 'left' : 'top';
+    const bSide = layout === 'lr' ? 'right' : 'bottom';
     const center = (side, index) => {
       const dot = board.querySelector(`.match-${side} .app-match-tile[data-match-index="${index}"] .match-dot`);
       if (!dot) return null;
@@ -103,8 +90,8 @@ function drawMatchLines() {
       return { x: r.left - rect.left + r.width / 2, y: r.top - rect.top + r.height / 2 };
     };
     svg.innerHTML = (play.lines || []).map((line) => {
-      const a = center('top', line.a);
-      const b = center('bottom', line.b);
+      const a = center(aSide, line.a);
+      const b = center(bSide, line.b);
       if (!a || !b) return '';
       return `<line class="match-line ${line.correct ? 'correct' : 'wrong'}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
     }).join('');
@@ -147,30 +134,47 @@ function matchingView(it) {
     return `<div class="app-canvas" style="aspect-ratio:${W} / ${H}">${tiles}</div>
       <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
   }
-  // 互動題：以 HTML 按鈕重畫（上排＝a、下排＝b；文字用 HTML、圖形用原圖裁切），連線量測後繪製
+  // 互動題：以 HTML 按鈕重畫（a 側在前、b 側在後；文字用 HTML、圖形用原圖裁切），連線量測後繪製
+  const layout = m.layout || 'tb';
   const pw = (i) => { const [, x1, , x2] = m.boxes[i].box; return Math.max(1, x2 - x1) / 1000 * W; };
-  const topIdx = m.boxes.map((_, i) => i).filter((i) => left.has(i));
-  const botIdx = m.boxes.map((_, i) => i).filter((i) => right.has(i));
+  const aIdx = m.boxes.map((_, i) => i).filter((i) => left.has(i));
+  const bIdx = m.boxes.map((_, i) => i).filter((i) => right.has(i));
+  const allFigure = (idx) => idx.length > 0 && idx.every((i) => kindOf(m.boxes[i]) === 'figure');
   const sumOf = (idx) => idx.reduce((s, i) => s + pw(i), 0);
-  const sumTop = sumOf(topIdx);
-  const sumBot = sumOf(botIdx);
-  const total = Math.max(sumTop, sumBot) || 1;
-  // 圖形排：欄寬依原圖像素寬等比例（同一 scale），短排補一個空白欄共用比例；文字排：等寬。
-  const colsFor = (idx, mode, sum) => {
-    if (mode !== 'figure') return `repeat(${Math.max(1, idx.length)}, 1fr)`;
-    const parts = idx.map((i) => `${pw(i).toFixed(2)}fr`);
-    const spacer = total - sum;
-    if (spacer > 0.5) parts.push(`${spacer.toFixed(2)}fr`);
-    return parts.join(' ');
-  };
-  const topNodes = topIdx.map((i) => matchNodeHtml(m, it.id, m.boxes[i], i, 'top', play)).join('');
-  const bottomNodes = botIdx.map((i) => matchNodeHtml(m, it.id, m.boxes[i], i, 'bottom', play)).join('');
-  return `<div class="app-match-board app-match-html" data-match-id="${esc(it.id)}">
-    <div class="match-row match-top" style="grid-template-columns:${colsFor(topIdx, modeOf(it.id, 'top'), sumTop)}">${topNodes}</div>
-    <svg class="match-lines" aria-hidden="true"></svg>
-    <div class="match-row match-bottom" style="grid-template-columns:${colsFor(botIdx, modeOf(it.id, 'bottom'), sumBot)}">${bottomNodes}</div>
-  </div>
-    <p class="app-match-help">先點上方元件，再點下方元件完成配對。${play.selected === null ? '' : '請選擇對應的下方元件。'}</p>
+  let inner, help;
+  if (layout === 'lr') {
+    // 左右兩欄：欄寬依原圖像素寬等比例，節點寬度用同一 scale
+    const maxA = Math.max(1, ...aIdx.map(pw));
+    const maxB = Math.max(1, ...bIdx.map(pw));
+    const nodeA = aIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'left', play, allFigure(aIdx) ? pw(i) / maxA * 100 : null)).join('');
+    const nodeB = bIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'right', play, allFigure(bIdx) ? pw(i) / maxB * 100 : null)).join('');
+    inner = `<div class="app-match-board app-match-html app-match-lr" data-match-id="${esc(it.id)}">
+      <div class="match-col match-left" style="flex:${maxA.toFixed(2)} 1 0">${nodeA}</div>
+      <div class="match-col match-right" style="flex:${maxB.toFixed(2)} 1 0">${nodeB}</div>
+      <svg class="match-lines" aria-hidden="true"></svg>
+    </div>`;
+    help = '先點左側元件，再點右側元件完成配對。';
+  } else {
+    // 圖形排：欄寬依原圖像素寬等比例（同一 scale），短排補空白欄；文字排：等寬。
+    const total = Math.max(sumOf(aIdx), sumOf(bIdx)) || 1;
+    const colsFor = (idx, sum) => {
+      if (!allFigure(idx)) return `repeat(${Math.max(1, idx.length)}, 1fr)`;
+      const parts = idx.map((i) => `${pw(i).toFixed(2)}fr`);
+      const spacer = total - sum;
+      if (spacer > 0.5) parts.push(`${spacer.toFixed(2)}fr`);
+      return parts.join(' ');
+    };
+    const topNodes = aIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'top', play)).join('');
+    const bottomNodes = bIdx.map((i) => matchNodeHtml(m, m.boxes[i], i, 'bottom', play)).join('');
+    inner = `<div class="app-match-board app-match-html" data-match-id="${esc(it.id)}">
+      <div class="match-row match-top" style="grid-template-columns:${colsFor(aIdx, sumOf(aIdx))}">${topNodes}</div>
+      <svg class="match-lines" aria-hidden="true"></svg>
+      <div class="match-row match-bottom" style="grid-template-columns:${colsFor(bIdx, sumOf(bIdx))}">${bottomNodes}</div>
+    </div>`;
+    help = '先點上方元件，再點下方元件完成配對。';
+  }
+  return `${inner}
+    <p class="app-match-help">${help}${play.selected === null ? '' : '請選擇對應的另一側元件。'}</p>
     <p class="app-correct app-match-result">${matchingResult(m, play)}</p>`;
 }
 
@@ -302,9 +306,9 @@ el.list.addEventListener('click', async (event) => {
     if (!m) return;
     const index = Number(matchTile.dataset.matchIndex);
     const play = state.matchingPlay[id] || { selected: null, lines: [] };
-    if (matchTile.closest('.match-top')) {
+    if (matchTile.closest('.match-top') || matchTile.closest('.match-left')) {
       play.selected = index;
-    } else if (matchTile.closest('.match-bottom') && play.selected !== null) {
+    } else if ((matchTile.closest('.match-bottom') || matchTile.closest('.match-right')) && play.selected !== null) {
       const key = matchingKey(play.selected, index);
       const expected = new Set((m.pairs || []).map((pair) => matchingKey(pair.a, pair.b)));
       const alreadyCorrect = (play.lines || []).some((line) => line.correct && matchingKey(line.a, line.b) === key);
