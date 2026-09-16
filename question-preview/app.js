@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, explanations: {}, play: {}, appMode: 'quiz', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, play: {}, appMode: 'quiz', mineOnly: false, q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   search: document.getElementById('search'),
@@ -9,6 +9,11 @@ const el = {
   fStatus: document.getElementById('fStatus'),
   fReview: document.getElementById('fReview'),
   fImage: document.getElementById('fImage'),
+  meSelect: document.getElementById('meSelect'),
+  addReviewer: document.getElementById('addReviewer'),
+  assignToggle: document.getElementById('assignToggle'),
+  assignPanel: document.getElementById('assignPanel'),
+  mineOnly: document.getElementById('mineOnly'),
   list: document.getElementById('list'),
   more: document.getElementById('more'),
 };
@@ -31,7 +36,14 @@ function optionsOf(it) {
   if (it.type === 'true_false') return ['正確', '錯誤'];
   return (it.options || []).map((o) => (typeof o === 'object' ? o.content : o)).filter(Boolean);
 }
-function reviewOf(id) { return state.reviews[id] || { status: '', note: '', type: '', typeMismatch: false }; }
+const EMPTY_REVIEW = { status: '', note: '', type: '', typeMismatch: false };
+function reviewOf(id) {
+  const rows = state.qreviews[id] || [];
+  return rows.find((r) => r.reviewerId === state.me) || rows[0] || EMPTY_REVIEW;
+}
+function othersOf(id) { return (state.qreviews[id] || []).filter((r) => r.reviewerId !== state.me); }
+function reviewerName(id) { const r = state.reviewers.find((x) => x.id === id); return r ? r.name : (id ? id : '未指定'); }
+function assignmentsOf(id) { return state.assignments[id] || []; }
 
 // 可選題型（活動層）與「建議題型」
 const TYPES = [['choice', '點選'], ['fill_blank', '填空'], ['word_order', '排序'], ['matching', '連連看'], ['listening', '聽力']];
@@ -301,6 +313,7 @@ function reviewHtml(it) {
   }).join('');
   const showType = !!(r.typeMismatch || chosen);
   return `<section class="review" data-id="${esc(it.id)}" data-type="${esc(chosen)}" data-mismatch="${r.typeMismatch ? '1' : '0'}">
+    ${state.me ? '' : '<div class="rv-mine-hint">請先在上方「審查人」選擇你的名字，才會記錄這筆審查。</div>'}
     <div class="rv-group">
       <div class="rv-label">審查</div>
       <div class="rv-btns">${statusBtns}${mismatchBtn}<button type="button" class="rv-clear">清除</button><span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
@@ -310,7 +323,20 @@ function reviewHtml(it) {
       <div class="rv-btns">${typeBtns}<span class="rv-hint">★ 目前題型（不適合才需改選）</span></div>
     </div>
     <textarea class="rv-note" rows="2" placeholder="調整註解／原因（會存到雲端）">${esc(r.note || '')}</textarea>
+    ${othersHtml(it.id)}
   </section>`;
+}
+
+function othersHtml(id) {
+  const others = othersOf(id);
+  if (!others.length) return '';
+  const rows = others.map((r) => {
+    const tag = r.status ? `<span class="tag ${r.status}">${REVIEW_LABELS[r.status] || r.status}</span>` : '<span class="tag none">未設定</span>';
+    const typeTxt = r.type ? `　建議題型：${esc(typeLabel(r.type))}` : '';
+    const mism = r.typeMismatch ? '（原題型不適合）' : '';
+    return `<div class="rv-other"><span class="who">${esc(reviewerName(r.reviewerId))}</span>${tag}<span class="note">${esc(r.note || '')}${r.note ? '　' : ''}${typeTxt}${mism}</span></div>`;
+  }).join('');
+  return `<div class="rv-others"><div class="title">其他審查人意見</div>${rows}</div>`;
 }
 
 function aiHtml(it) {
@@ -330,6 +356,10 @@ function aiHtml(it) {
 function filtered() {
   const q = state.q.trim().toLowerCase();
   return state.items.filter((it) => {
+    if (state.mineOnly) {
+      const rows = state.assignments[it.id] || [];
+      if (!rows.some((a) => a.reviewerId === state.me && a.status !== 'done')) return false;
+    }
     if (state.chapter && it.unit !== state.chapter) return false;
     if (state.node && it.node !== state.node) return false;
     if (state.type && it.type !== state.type) return false;
@@ -400,7 +430,7 @@ function fill(sel, values, label) {
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 async function saveReview(id, nodeId, status, note, type, typeMismatch) {
-  const payload = { note, nodeId, type: type || '', typeMismatch: !!typeMismatch };
+  const payload = { note, nodeId, type: type || '', typeMismatch: !!typeMismatch, reviewerId: state.me || '' };
   if (status) payload.status = status; // 空字串會被後端視為非法 enum，省略
   const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, {
     method: 'PUT',
@@ -522,8 +552,13 @@ el.list.addEventListener('click', async (event) => {
   const item = state.items.find((i) => i.id === id);
   const stateEl = section.querySelector('.rv-state');
   const badge = section.closest('.card').querySelector('.badge.rv');
+  if (!state.me) { stateEl.textContent = '請先選擇審查人'; return; }
   const note = section.querySelector('.rv-note').value;
   const suggested = suggestedTypeOf(item);
+  const putMyReview = (row) => {
+    const rows = state.qreviews[id] || [];
+    state.qreviews[id] = rows.filter((r) => r.reviewerId !== state.me).concat(row);
+  };
   const syncType = (chosen) => {
     section.dataset.type = chosen || '';
     section.querySelectorAll('.rv-type').forEach((b) => {
@@ -541,9 +576,9 @@ el.list.addEventListener('click', async (event) => {
   try {
     if (clearBtn) {
       stateEl.textContent = '清除中…';
-      const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
+      const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}?reviewer=${encodeURIComponent(state.me || '')}`, { method: 'DELETE', headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
       if (!res.ok && res.status !== 404) throw new Error(`${res.status}`);
-      delete state.reviews[id];
+      state.qreviews[id] = (state.qreviews[id] || []).filter((r) => r.reviewerId !== state.me);
       section.querySelector('.rv-note').value = '';
       section.querySelectorAll('.rv-status-btn').forEach((b) => b.classList.remove('on'));
       setMismatch(false, ''); syncType('');
@@ -563,7 +598,7 @@ el.list.addEventListener('click', async (event) => {
     }
     stateEl.textContent = '儲存中…';
     const saved = await saveReview(id, item ? item.node : undefined, status, note, type, typeMismatch);
-    state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, typeMismatch: saved.typeMismatch, updatedAt: saved.updatedAt };
+    putMyReview({ reviewerId: state.me, status: saved.status, note: saved.note, type: saved.type, typeMismatch: saved.typeMismatch, updatedAt: saved.updatedAt });
     section.querySelectorAll('.rv-status-btn').forEach((b) => b.classList.toggle('on', b.dataset.status === saved.status));
     setMismatch(saved.typeMismatch, saved.type); syncType(saved.type || '');
     stateEl.textContent = '已儲存 ✓';
@@ -599,11 +634,97 @@ el.list.addEventListener('focusout', async (event) => {
   const cur = reviewOf(id);
   if (note.value === (cur.note || '')) return;
   const stateEl = section.querySelector('.rv-state');
+  if (!state.me) { stateEl.textContent = '請先選擇審查人'; return; }
   try {
     const saved = await saveReview(id, item ? item.node : undefined, cur.status || '', note.value, cur.type || '', cur.typeMismatch);
-    state.reviews[id] = { status: saved.status, note: saved.note, type: saved.type, updatedAt: saved.updatedAt };
+    const rows = state.qreviews[id] || [];
+    state.qreviews[id] = rows.filter((r) => r.reviewerId !== state.me).concat({ reviewerId: state.me, status: saved.status, note: saved.note, type: saved.type, typeMismatch: saved.typeMismatch, updatedAt: saved.updatedAt });
     stateEl.textContent = '已儲存 ✓';
   } catch (e) { stateEl.textContent = '失敗：' + e.message; }
+});
+
+// ---- 審查人 / 分配 ----
+function renderMeSelect() {
+  const opts = ['<option value="">（未選審查人）</option>'].concat(
+    state.reviewers.map((r) => `<option value="${esc(r.id)}"${state.me === r.id ? ' selected' : ''}>${esc(r.name)}</option>`),
+  );
+  el.meSelect.innerHTML = opts.join('');
+}
+function asgTargets() {
+  return [...el.assignPanel.querySelectorAll('.asg-count')]
+    .map((inp) => ({ reviewerId: inp.dataset.id, count: Number(inp.value) || 0 }))
+    .filter((t) => t.count > 0);
+}
+async function loadProgress() {
+  const box = document.getElementById('asgProgress');
+  if (!box) return;
+  try {
+    const d = await (await fetch(`${REVIEWS_API}/v1/review-progress`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
+    box.textContent = (d.items || []).length
+      ? '進度：' + d.items.map((p) => `${p.reviewerName || p.reviewerId} ${p.done || 0}/${p.total}`).join('　')
+      : '尚無指派';
+  } catch { box.textContent = ''; }
+}
+function renderAssignPanel() {
+  if (el.assignPanel.hidden) return;
+  const pool = filtered();
+  const rows = state.reviewers.length
+    ? state.reviewers.map((r) => `<div class="asg-row"><span class="asg-name">${esc(r.name)}</span><input class="asg-count" type="number" min="0" value="0" data-id="${esc(r.id)}"> 題</div>`).join('')
+    : '<div class="hint">尚無審查人，請先按「＋新增」。</div>';
+  el.assignPanel.innerHTML = `<h3>審查分配（雙審：每題 2 位不同審查人）</h3>
+    <p class="hint">題池＝目前篩選結果，共 <b>${pool.length}</b> 題（建立時會排除已指派者）。填各人題數（可不相等），系統兩兩配對；「預覽」不會寫入。</p>
+    ${rows}
+    <div class="asg-row"><button type="button" class="mini-btn" id="asgPreview">預覽</button><button type="button" class="mini-btn on" id="asgCreate">建立指派</button><span class="asg-state" id="asgState"></span></div>
+    <div class="asg-progress" id="asgProgress"></div>`;
+  loadProgress();
+}
+async function reloadAssignments() {
+  try {
+    const d = await (await fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
+    state.assignments = {};
+    for (const a of (d.items || [])) (state.assignments[a.sourceQuestionId] = state.assignments[a.sourceQuestionId] || []).push(a);
+    loadProgress();
+  } catch { /* ignore */ }
+}
+async function runAssign(preview) {
+  const st = document.getElementById('asgState');
+  const targets = asgTargets();
+  if (!targets.length) { st.textContent = '請至少填一位審查人的題數'; return; }
+  const ids = filtered().map((it) => it.id);
+  st.textContent = preview ? '預覽中…' : '建立中…';
+  try {
+    const res = await fetch(`${REVIEWS_API}/v1/assignments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+      body: JSON.stringify({ ids, targets, copies: 2, preview }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.status);
+    if (preview) st.textContent = `預覽：可分配 ${d.questions} 題、${d.assignments} 筆指派`;
+    else { st.textContent = `已建立：${d.questions} 題、${d.assignments} 筆`; await reloadAssignments(); }
+  } catch (e) { st.textContent = '失敗：' + e.message; }
+}
+el.meSelect.addEventListener('change', (e) => { state.me = e.target.value; localStorage.setItem('cp_me', state.me); render(); });
+el.addReviewer.addEventListener('click', async () => {
+  const name = prompt('新增審查人姓名');
+  if (!name || !name.trim()) return;
+  try {
+    const res = await fetch(`${REVIEWS_API}/v1/reviewers`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` }, body: JSON.stringify({ name: name.trim() }) });
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.error || res.status);
+    state.reviewers.push(r); state.me = r.id; localStorage.setItem('cp_me', r.id);
+    renderMeSelect(); renderAssignPanel(); render();
+  } catch (e) { alert('新增失敗：' + e.message); }
+});
+el.assignToggle.addEventListener('click', () => {
+  el.assignPanel.hidden = !el.assignPanel.hidden;
+  el.assignToggle.classList.toggle('on', !el.assignPanel.hidden);
+  renderAssignPanel();
+});
+el.mineOnly.addEventListener('change', (e) => { state.mineOnly = e.target.checked; state.limit = 100; render(); });
+el.assignPanel.addEventListener('click', (e) => {
+  if (e.target.id === 'asgPreview') runAssign(true);
+  if (e.target.id === 'asgCreate') runAssign(false);
 });
 
 const params = new URLSearchParams(location.search);
@@ -629,12 +750,19 @@ Promise.all([
   fetch(`${REVIEWS_API}/v1/reviews`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
   EXPLANATIONS_URL ? fetch(EXPLANATIONS_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
   fetch(`${EXPLAIN_API}/v1/explanations`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: {} })),
-]).then(([d, app, match, rev, expl, explApi]) => {
+  fetch(`${REVIEWS_API}/v1/reviewers`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+  fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+]).then(([d, app, match, rev, expl, explApi, rvs, asg]) => {
   state.items = d.items;
   state.appdata = app.items || {};
   state.matching = match.items || {};
   state.explanations = { ...(expl.items || {}), ...(explApi.items || {}) };
-  for (const r of (rev.items || [])) state.reviews[r.sourceQuestionId] = r;
+  state.qreviews = {};
+  for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
+  state.reviewers = rvs.items || [];
+  state.assignments = {};
+  for (const a of (asg.items || [])) (state.assignments[a.sourceQuestionId] = state.assignments[a.sourceQuestionId] || []).push(a);
+  renderMeSelect();
   const units = [...new Set(state.items.map((i) => i.unit).filter(Boolean))];
   const unitNo = (u) => Math.min(...state.items.filter((i) => i.unit === u).map((i) => parseInt(i.section, 10) || 99));
   units.sort((a, b) => unitNo(a) - unitNo(b));

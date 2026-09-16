@@ -186,27 +186,111 @@ const reviewSchema = z.object({
   type: z.string().max(32).optional(),
   typeMismatch: z.boolean().optional(),
   nodeId: z.string().max(64).optional(),
-  reviewer: z.string().max(80).optional(),
+  reviewerId: z.string().max(64).optional(),
 });
 
-app.get('/v1/reviews', (req, res) => res.json({ items: store.listReviews({ node: req.query.node, status: req.query.status }) }));
+// 匯出（給 AI 後續優化題目用）：結構化審查意見
+app.get('/v1/reviews/export', (req, res) => {
+  const items = store.exportReviews();
+  if (req.query.format === 'csv') {
+    const cols = ['sourceQuestionId', 'reviewerId', 'reviewerName', 'nodeId', 'status', 'type', 'typeMismatch', 'note', 'updatedAt'];
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.join(','), ...items.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="reviews-export.csv"');
+    return res.send('\uFEFF' + csv);
+  }
+  res.json({ count: items.length, items });
+});
+app.get('/v1/reviews', (req, res) => res.json({ items: store.listQuestionReviews({ sourceQuestionId: req.query.question, reviewerId: req.query.reviewer }) }));
 app.get('/v1/reviews/:id', (req, res) => {
-  const review = store.getReview(req.params.id);
-  if (!review) return res.status(404).json({ error: 'not found' });
-  res.json(review);
+  const items = store.listQuestionReviews({ sourceQuestionId: req.params.id });
+  if (!items.length) return res.status(404).json({ error: 'not found' });
+  res.json(req.query.reviewer ? (items.find((r) => r.reviewerId === req.query.reviewer) || null) : { items });
 });
 app.put('/v1/reviews/:id', (req, res) => {
   const body = { ...(req.body || {}) };
   if (body.status === '') delete body.status; // 空字串視為未設定
   const parsed = reviewSchema.safeParse(body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
-  res.json(store.upsertReview({ sourceQuestionId: req.params.id, ...parsed.data }));
+  const reviewerId = parsed.data.reviewerId || '';
+  res.json(store.upsertQuestionReview({ sourceQuestionId: req.params.id, reviewerId, nodeId: parsed.data.nodeId, status: parsed.data.status, note: parsed.data.note, type: parsed.data.type, typeMismatch: parsed.data.typeMismatch }));
 });
 app.delete('/v1/reviews/:id', (req, res) => {
-  const deleted = store.deleteReview(req.params.id);
+  const reviewerId = req.query.reviewer || '';
+  const deleted = store.deleteQuestionReview(req.params.id, reviewerId);
   if (!deleted) return res.status(404).json({ error: 'not found' });
-  res.json({ deleted: true, sourceQuestionId: req.params.id });
+  res.json({ deleted: true, sourceQuestionId: req.params.id, reviewerId });
 });
+
+// --- 審查人 ---
+app.get('/v1/reviewers', (_req, res) => res.json({ items: store.listReviewers() }));
+app.post('/v1/reviewers', (req, res) => {
+  const name = String((req.body || {}).name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const id = (req.body && req.body.id) || `r_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  res.status(201).json(store.addReviewer({ id, name }));
+});
+app.delete('/v1/reviewers/:id', (req, res) => {
+  const deleted = store.deleteReviewer(req.params.id);
+  if (!deleted) return res.status(404).json({ error: 'not found' });
+  res.json({ deleted: true, id: req.params.id });
+});
+
+// --- 指派（雙審：每題 2 位不同審查人；各人題數可不相等）---
+const assignSchema = z.object({
+  ids: z.array(z.string()).min(1),
+  targets: z.array(z.object({ reviewerId: z.string(), count: z.number().int().min(0) })).min(1),
+  copies: z.number().int().min(2).max(3).default(2),
+  preview: z.boolean().optional(),
+  excludeAssigned: z.boolean().optional(),
+});
+
+function planAssignments(ids, targets, copies, exclude) {
+  const seq = [];
+  const t = targets.map((x) => ({ id: x.reviewerId, left: x.count }));
+  let remaining = t.reduce((s, x) => s + x.left, 0);
+  while (remaining > 0) {
+    for (const x of t) { if (x.left > 0) { seq.push(x.id); x.left--; remaining--; } }
+  }
+  // 決定性洗牌，讓配對混合（避免每題都是同兩人）
+  for (let i = seq.length - 1; i > 0; i--) { const j = (i * 7 + 3) % (i + 1); [seq[i], seq[j]] = [seq[j], seq[i]]; }
+  const used = new Array(seq.length).fill(false);
+  const pairs = [];
+  for (let i = 0; i < seq.length; i++) {
+    if (used[i]) continue;
+    for (let j = i + 1; j < seq.length; j++) {
+      if (!used[j] && seq[j] !== seq[i]) { pairs.push([seq[i], seq[j]]); used[i] = used[j] = true; break; }
+    }
+  }
+  const picks = exclude ? ids.filter((id) => !exclude.has(id)) : ids;
+  const rows = [];
+  for (let k = 0; k < pairs.length && k < picks.length; k++) {
+    rows.push({ sourceQuestionId: picks[k], reviewerId: pairs[k][0] });
+    rows.push({ sourceQuestionId: picks[k], reviewerId: pairs[k][1] });
+  }
+  return rows;
+}
+
+app.post('/v1/assignments', (req, res) => {
+  const parsed = assignSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  const { ids, targets, copies, preview, excludeAssigned } = parsed.data;
+  const exclude = excludeAssigned === false ? null : new Set(store.assignedQuestionIds());
+  const rows = planAssignments(ids, targets, copies, exclude);
+  const questions = new Set(rows.map((r) => r.sourceQuestionId)).size;
+  if (preview) return res.json({ preview: true, questions, assignments: rows.length, rows });
+  const batchId = `b_${Date.now().toString(36)}`;
+  const created = store.createAssignments(rows, batchId);
+  res.status(201).json({ batchId, questions, assignments: created });
+});
+app.get('/v1/assignments', (req, res) => res.json({ items: store.listAssignments({ reviewerId: req.query.reviewer, status: req.query.status }) }));
+app.post('/v1/assignments/reassign', (req, res) => {
+  const body = req.body || {};
+  if (!body.from || !body.to) return res.status(400).json({ error: 'from/to required' });
+  res.json({ moved: store.reassign({ from: body.from, to: body.to, limit: Number(body.limit) || 1000 }) });
+});
+app.get('/v1/review-progress', (_req, res) => res.json({ items: store.reviewProgress() }));
 
 app.use((err, _req, res, _next) => {
   console.error(err);

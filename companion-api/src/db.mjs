@@ -23,6 +23,22 @@ CREATE TABLE IF NOT EXISTS reviews (
 CREATE TABLE IF NOT EXISTS explanations (
   sourceQuestionId TEXT PRIMARY KEY, model TEXT, explanation TEXT, updatedAt TEXT
 );
+CREATE TABLE IF NOT EXISTS reviewers (
+  id TEXT PRIMARY KEY, name TEXT, active INTEGER DEFAULT 1, createdAt TEXT
+);
+CREATE TABLE IF NOT EXISTS assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sourceQuestionId TEXT, reviewerId TEXT, batchId TEXT, status TEXT DEFAULT 'pending',
+  assignedAt TEXT, doneAt TEXT, UNIQUE(sourceQuestionId, reviewerId)
+);
+CREATE TABLE IF NOT EXISTS question_reviews (
+  sourceQuestionId TEXT, reviewerId TEXT, nodeId TEXT, status TEXT, note TEXT,
+  type TEXT, typeMismatch INTEGER DEFAULT 0, updatedAt TEXT,
+  PRIMARY KEY (sourceQuestionId, reviewerId)
+);
+CREATE INDEX IF NOT EXISTS ix_assign_reviewer ON assignments(reviewerId, status);
+CREATE INDEX IF NOT EXISTS ix_assign_question ON assignments(sourceQuestionId);
+CREATE INDEX IF NOT EXISTS ix_qreview_question ON question_reviews(sourceQuestionId);
 CREATE INDEX IF NOT EXISTS ix_answers_learner ON answers(learnerId, createdAt);
 CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWrongAt);
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
@@ -32,6 +48,11 @@ CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
 const reviewCols = db.prepare('PRAGMA table_info(reviews)').all().map((c) => c.name);
 if (!reviewCols.includes('type')) db.exec('ALTER TABLE reviews ADD COLUMN type TEXT');
 if (!reviewCols.includes('typeMismatch')) db.exec('ALTER TABLE reviews ADD COLUMN typeMismatch INTEGER DEFAULT 0');
+// 舊 reviews（單筆）遷移成 question_reviews（可多審查人；legacy 以 reviewerId='' 表示）
+try {
+  db.exec(`INSERT OR IGNORE INTO question_reviews (sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, updatedAt)
+           SELECT sourceQuestionId, '', nodeId, status, note, type, typeMismatch, updatedAt FROM reviews`);
+} catch { /* ignore migration errors */ }
 
 const now = () => new Date().toISOString();
 
@@ -115,5 +136,103 @@ export const store = {
                 ON CONFLICT(sourceQuestionId) DO UPDATE SET model=excluded.model, explanation=excluded.explanation, updatedAt=excluded.updatedAt`)
       .run(row.sourceQuestionId, row.model, row.explanation, row.updatedAt);
     return row;
+  },
+
+  // ---- 審查人 ----
+  listReviewers() {
+    return db.prepare('SELECT id, name, active, createdAt FROM reviewers ORDER BY createdAt').all();
+  },
+  getReviewer(id) {
+    return db.prepare('SELECT id, name, active, createdAt FROM reviewers WHERE id=?').get(id) || null;
+  },
+  addReviewer({ id, name }) {
+    db.prepare('INSERT OR IGNORE INTO reviewers (id, name, active, createdAt) VALUES (?,?,?,?)').run(id, name, 1, now());
+    return this.getReviewer(id);
+  },
+  deleteReviewer(id) {
+    db.prepare('DELETE FROM assignments WHERE reviewerId=?').run(id);
+    return db.prepare('DELETE FROM reviewers WHERE id=?').run(id).changes > 0;
+  },
+
+  // ---- 指派 ----
+  createAssignments(rows, batchId) {
+    const stmt = db.prepare("INSERT OR IGNORE INTO assignments (sourceQuestionId, reviewerId, batchId, status, assignedAt) VALUES (?,?,?,'pending',?)");
+    const tx = db.transaction((rs) => { for (const r of rs) stmt.run(r.sourceQuestionId, r.reviewerId, batchId, now()); });
+    tx(rows);
+    return rows.length;
+  },
+  listAssignments({ reviewerId, status } = {}) {
+    const where = [];
+    const params = [];
+    if (reviewerId) { where.push('a.reviewerId = ?'); params.push(reviewerId); }
+    if (status) { where.push('a.status = ?'); params.push(status); }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return db.prepare(`SELECT a.sourceQuestionId, a.reviewerId, a.status, a.assignedAt, a.doneAt, r.name AS reviewerName
+                       FROM assignments a LEFT JOIN reviewers r ON r.id = a.reviewerId ${clause}
+                       ORDER BY a.id`).all(...params);
+  },
+  assignedQuestionIds() {
+    return db.prepare('SELECT DISTINCT sourceQuestionId FROM assignments').all().map((r) => r.sourceQuestionId);
+  },
+  markAssignmentDone(sourceQuestionId, reviewerId) {
+    db.prepare("UPDATE assignments SET status='done', doneAt=? WHERE sourceQuestionId=? AND reviewerId=?").run(now(), sourceQuestionId, reviewerId);
+  },
+  reassign({ from, to, limit = 1000 }) {
+    const rows = db.prepare("SELECT id FROM assignments WHERE reviewerId=? AND status='pending' LIMIT ?").all(from, limit);
+    const upd = db.prepare("UPDATE OR IGNORE assignments SET reviewerId=?, batchId='reassigned' WHERE id=?");
+    const del = db.prepare('DELETE FROM assignments WHERE id=?');
+    const tx = db.transaction((ids) => {
+      for (const r of ids) { const res = upd.run(to, r.id); if (res.changes === 0) del.run(r.id); }
+    });
+    tx(rows);
+    return rows.length;
+  },
+  reviewProgress() {
+    return db.prepare(`SELECT a.reviewerId, r.name AS reviewerName, COUNT(*) AS total,
+                              SUM(CASE WHEN a.status='done' THEN 1 ELSE 0 END) AS done
+                       FROM assignments a LEFT JOIN reviewers r ON r.id = a.reviewerId
+                       GROUP BY a.reviewerId`).all();
+  },
+
+  // ---- 逐審查人審查意見（雙審）----
+  getQuestionReview(sourceQuestionId, reviewerId) {
+    const r = db.prepare('SELECT sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, updatedAt FROM question_reviews WHERE sourceQuestionId=? AND reviewerId=?').get(sourceQuestionId, reviewerId);
+    return r ? { ...r, typeMismatch: !!r.typeMismatch } : null;
+  },
+  listQuestionReviews({ sourceQuestionId, reviewerId } = {}) {
+    const where = [];
+    const params = [];
+    if (sourceQuestionId) { where.push('sourceQuestionId = ?'); params.push(sourceQuestionId); }
+    if (reviewerId) { where.push('reviewerId = ?'); params.push(reviewerId); }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return db.prepare(`SELECT sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, updatedAt
+                       FROM question_reviews ${clause} ORDER BY updatedAt DESC`)
+      .all(...params).map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
+  },
+  upsertQuestionReview({ sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch }) {
+    const existing = this.getQuestionReview(sourceQuestionId, reviewerId);
+    const row = {
+      sourceQuestionId, reviewerId,
+      nodeId: nodeId ?? (existing ? existing.nodeId : null),
+      status: status ?? (existing ? existing.status : 'pending'),
+      note: note ?? (existing ? existing.note : ''),
+      type: type ?? (existing ? existing.type : null),
+      typeMismatch: (typeMismatch ?? (existing ? existing.typeMismatch : false)) ? 1 : 0,
+      updatedAt: now(),
+    };
+    db.prepare(`INSERT INTO question_reviews (sourceQuestionId,reviewerId,nodeId,status,note,type,typeMismatch,updatedAt) VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId, reviewerId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, typeMismatch=excluded.typeMismatch, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.reviewerId, row.nodeId, row.status, row.note, row.type, row.typeMismatch, row.updatedAt);
+    if (reviewerId) this.markAssignmentDone(sourceQuestionId, reviewerId);
+    return { ...row, typeMismatch: !!row.typeMismatch };
+  },
+  deleteQuestionReview(sourceQuestionId, reviewerId) {
+    return db.prepare('DELETE FROM question_reviews WHERE sourceQuestionId=? AND reviewerId=?').run(sourceQuestionId, reviewerId).changes > 0;
+  },
+  // 給 AI 後續優化：結構化匯出（含審查人、意見、建議題型）
+  exportReviews() {
+    return db.prepare(`SELECT q.sourceQuestionId, q.reviewerId, r.name AS reviewerName, q.nodeId, q.status, q.note, q.type, q.typeMismatch, q.updatedAt
+                       FROM question_reviews q LEFT JOIN reviewers r ON r.id = q.reviewerId
+                       ORDER BY q.sourceQuestionId`).all().map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
   },
 };

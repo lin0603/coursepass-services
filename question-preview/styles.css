@@ -94,6 +94,31 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .rv-hint { font-size: 12px; color: #8b93a5; }
 .rv-clear { min-height: 34px; padding: 4px 12px; border: 1px solid #e3c9c7; border-radius: 8px; background: #fbf3f2; color: #a6403b; font: inherit; font-weight: 600; cursor: pointer; }
 .rv-state { font-size: 13px; color: #236251; }
+.fsep { flex: 1 1 100%; height: 0; }
+.me-select { min-height: 34px; padding: 4px 10px; border: 1px solid #2a3140; border-radius: 8px; background: #0f1218; color: #e6e9ef; }
+.mini-btn { min-height: 34px; padding: 4px 12px; border: 1px solid #2a3140; border-radius: 8px; background: #0f1218; color: #cbd5d1; font: inherit; font-weight: 600; cursor: pointer; }
+.mini-btn.on { background: #087e8b; border-color: #087e8b; color: #fff; }
+.assign-panel { margin: 10px 22px 4px; padding: 14px; border: 1px solid #2a3140; border-radius: 10px; background: #171b24; color: #e6e9ef; }
+.assign-panel[hidden] { display: none; }
+.assign-panel h3 { margin: 0 0 6px; font-size: 14px; }
+.assign-panel .hint { color: #8b93a5; font-size: 12px; margin: 0 0 10px; }
+.asg-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.asg-name { min-width: 130px; font-weight: 600; }
+.asg-count { width: 90px; min-height: 32px; padding: 2px 8px; border-radius: 8px; border: 1px solid #2a3140; background: #0f1218; color: #e6e9ef; }
+.asg-state { font-size: 13px; color: #8b93a5; }
+.asg-progress { font-size: 13px; color: #cbd5d1; margin-top: 8px; }
+/* 其他審查人意見 */
+.rv-others { margin-top: 10px; border-top: 1px dashed #dbe5e2; padding-top: 8px; }
+.rv-others .title { font-size: 12px; color: #8b93a5; margin-bottom: 6px; }
+.rv-other { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; font-size: 13px; }
+.rv-other .who { font-weight: 700; color: #42606a; flex: 0 0 auto; }
+.rv-other .tag { border-radius: 999px; padding: 1px 8px; font-weight: 700; flex: 0 0 auto; }
+.rv-other .tag.approved { background: #eaf5ee; color: #236251; }
+.rv-other .tag.adjust { background: #fdf1e0; color: #8a5a12; }
+.rv-other .tag.rejected { background: #fbeceb; color: #a6403b; }
+.rv-other .tag.none { background: #eef4f1; color: #42606a; }
+.rv-other .note { color: #3b4a48; }
+.rv-mine-hint { font-size: 12px; color: #b45309; }
 /* AI 解題（第三欄） */
 .ai { border: 1px solid #d9e3ea; border-radius: 10px; background: #f7fafc; padding: 10px; }
 .ai-head { font-weight: 800; color: #1d3a48; margin-bottom: 8px; }
