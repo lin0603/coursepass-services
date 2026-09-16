@@ -51,32 +51,61 @@ function fracHtml(label) {
   return esc(label).replace(/(\d+)\s*\/\s*(\d+)/g, (_, n, d) => `<span class="frac"><span class="num">${n}</span><span class="den">${d}</span></span>`);
 }
 
-function matchNodeHtml(b, i, side, play) {
+// 各題按鈕內容型別：'text' 純 HTML 文字（分數用堆疊）、'figure' 原圖裁切（背景）。
+// 未列出者預設 'figure'。可給 {top,bottom} 分別指定上下排（例：上圖下字）。
+const MATCHING_MODE = {
+  EMA1509000187: 'text',
+  EMA1509000635: 'text',
+  EMA1509000982: 'text',
+  EMA1509001028: 'text',
+  EMA1509004744: { top: 'figure', bottom: 'text' },
+  EMA1509004859: { top: 'figure', bottom: 'text' },
+  EMA1509004863: { top: 'figure', bottom: 'text' },
+  EMA1509002747: 'figure',
+  EMA1509002786: 'figure',
+  EMA1509002878: 'figure',
+  EMA1509004463: 'figure',
+  EMA1509004903: 'figure',
+};
+function modeOf(id, side) {
+  const c = MATCHING_MODE[id];
+  if (!c) return 'figure';
+  return typeof c === 'string' ? c : (c[side] || 'figure');
+}
+
+function matchNodeHtml(m, id, b, i, side, play) {
   const sel = play.selected === i ? ' selected' : '';
-  return `<button type="button" class="app-match-tile match-node match-${side}${sel}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}">${fracHtml(b.label || '')}<span class="match-dot"></span></button>`;
+  const mode = modeOf(id, side);
+  const [y1, x1, y2, x2] = b.box;
+  const fig = mode === 'figure';
+  const style = fig ? ` style="aspect-ratio:${Math.max(1, x2 - x1)} / ${Math.max(1, y2 - y1)};${cropBg(m.image, b.box)}"` : '';
+  const inner = fig ? '' : fracHtml(b.label || '');
+  return `<button type="button" class="app-match-tile match-node match-${side}${fig ? ' match-fig' : ''}${sel}" data-match-index="${i}" aria-label="${esc(b.label || `元件 ${i + 1}`)}"${style}>${inner}<span class="match-dot"></span></button>`;
 }
 
 // 連線以量測後的像素座標繪製（純 HTML 按鍵的排版非固定比例）
 function drawMatchLines() {
-  const board = document.querySelector('.app-match-board[data-match-id="EMA1509000187"]');
-  const svg = board && board.querySelector('.match-lines');
-  if (!svg) return;
-  const rect = board.getBoundingClientRect();
-  svg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
-  svg.setAttribute('preserveAspectRatio', 'none');
-  const play = state.matchingPlay[board.dataset.matchId] || { lines: [] };
-  const center = (index) => {
-    const dot = board.querySelector(`.app-match-tile[data-match-index="${index}"] .match-dot`);
-    if (!dot) return null;
-    const r = dot.getBoundingClientRect();
-    return { x: r.left - rect.left + r.width / 2, y: r.top - rect.top + r.height / 2 };
-  };
-  svg.innerHTML = (play.lines || []).map((line) => {
-    const a = center(line.a);
-    const b = center(line.b);
-    if (!a || !b) return '';
-    return `<line class="match-line ${line.correct ? 'correct' : 'wrong'}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
-  }).join('');
+  document.querySelectorAll('.app-match-board[data-match-id]').forEach((board) => {
+    const svg = board.querySelector('.match-lines');
+    if (!svg) return;
+    const rect = board.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    svg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    const play = state.matchingPlay[board.dataset.matchId] || { lines: [] };
+    const center = (side, index) => {
+      const dot = board.querySelector(`.match-${side} .app-match-tile[data-match-index="${index}"] .match-dot`);
+      if (!dot) return null;
+      const r = dot.getBoundingClientRect();
+      return { x: r.left - rect.left + r.width / 2, y: r.top - rect.top + r.height / 2 };
+    };
+    svg.innerHTML = (play.lines || []).map((line) => {
+      const a = center('top', line.a);
+      const b = center('bottom', line.b);
+      if (!a || !b) return '';
+      return `<line class="match-line ${line.correct ? 'correct' : 'wrong'}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
+    }).join('');
+  });
 }
 
 function matchingResult(m, play) {
@@ -89,7 +118,7 @@ function matchingResult(m, play) {
 
 window.addEventListener('resize', drawMatchLines);
 
-// 連連看：裁切各元件，依原圖座標（絕對定位）排列；同色＝同一配對（依答案）。
+// 連連看：有抽取資料者以 HTML 按鈕呈現（可互動）；資料不可靠者退回原圖裁切預覽。
 function matchingView(it) {
   const m = state.matching[it.id];
   if (!m || !m.image || !Array.isArray(m.boxes) || m.boxes.length < 2) {
@@ -97,10 +126,13 @@ function matchingView(it) {
   }
   const W = m.width || 1000;
   const H = m.height || 1000;
-  const interactive = it.id === 'EMA1509000187';
   const play = state.matchingPlay[it.id] || { selected: null, lines: [] };
   const group = {};
   (m.pairs || []).forEach((p, gi) => { group['a' + p.a] = gi; group['b' + p.b] = gi; });
+  const left = new Set((m.pairs || []).map((p) => p.a));
+  const right = new Set((m.pairs || []).map((p) => p.b));
+  // 同一索引同時出現在上下排＝抽取資料不可靠，退回原圖裁切預覽
+  const interactive = right.size > 0 && [...left].every((i) => !right.has(i));
   if (!interactive) {
     const tiles = m.boxes.map((b, i) => {
       const [y1, x1, y2, x2] = b.box;
@@ -112,17 +144,15 @@ function matchingView(it) {
     return `<div class="app-canvas" style="aspect-ratio:${W} / ${H}">${tiles}</div>
       <p class="app-correct">依原圖位置裁切元件；同色＝同一配對（依答案）。</p>`;
   }
-  // 互動題：以純 HTML 重畫按鍵（上方條件、下方分數），連線量測後繪製
-  const left = new Set((m.pairs || []).map((p) => p.a));
-  const right = new Set((m.pairs || []).map((p) => p.b));
-  const topNodes = m.boxes.map((b, i) => (left.has(i) ? matchNodeHtml(b, i, 'top', play) : '')).join('');
-  const bottomNodes = m.boxes.map((b, i) => (right.has(i) ? matchNodeHtml(b, i, 'bottom', play) : '')).join('');
+  // 互動題：以 HTML 按鈕重畫（上排＝a、下排＝b；文字用 HTML、圖形用原圖裁切），連線量測後繪製
+  const topNodes = m.boxes.map((b, i) => (left.has(i) ? matchNodeHtml(m, it.id, b, i, 'top', play) : '')).join('');
+  const bottomNodes = m.boxes.map((b, i) => (right.has(i) ? matchNodeHtml(m, it.id, b, i, 'bottom', play) : '')).join('');
   return `<div class="app-match-board app-match-html" data-match-id="${esc(it.id)}">
     <div class="match-row match-top" style="grid-template-columns:repeat(${Math.max(1, left.size)}, 1fr)">${topNodes}</div>
     <svg class="match-lines" aria-hidden="true"></svg>
     <div class="match-row match-bottom" style="grid-template-columns:repeat(${Math.max(1, right.size)}, 1fr)">${bottomNodes}</div>
   </div>
-    <p class="app-match-help">先點上方條件，再點下方分數。${play.selected === null ? '' : '請選擇對應的下方分數。'}</p>
+    <p class="app-match-help">先點上方元件，再點下方元件完成配對。${play.selected === null ? '' : '請選擇對應的下方元件。'}</p>
     <p class="app-correct app-match-result">${matchingResult(m, play)}</p>`;
 }
 
@@ -250,12 +280,10 @@ el.list.addEventListener('click', async (event) => {
     const m = id && state.matching[id];
     if (!m) return;
     const index = Number(matchTile.dataset.matchIndex);
-    const leftIndexes = new Set((m.pairs || []).map((pair) => pair.a));
-    const rightIndexes = new Set((m.pairs || []).map((pair) => pair.b));
     const play = state.matchingPlay[id] || { selected: null, lines: [] };
-    if (leftIndexes.has(index)) {
+    if (matchTile.closest('.match-top')) {
       play.selected = index;
-    } else if (rightIndexes.has(index) && play.selected !== null) {
+    } else if (matchTile.closest('.match-bottom') && play.selected !== null) {
       const key = matchingKey(play.selected, index);
       const expected = new Set((m.pairs || []).map((pair) => matchingKey(pair.a, pair.b)));
       const alreadyCorrect = (play.lines || []).some((line) => line.correct && matchingKey(line.a, line.b) === key);

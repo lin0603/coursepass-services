@@ -3,6 +3,7 @@
 康軒 115 上 · 數學 · 五年級題目預覽的靜態站（章節／知識節點／題型／狀態篩選、只看圖形題）。
 
 - 程式碼在本 repo（`coursepass-services/question-preview/`），**git push → Coolify 自動部署**（Dockerfile/nginx）。
+- 連連看改成 HTML 按鈕的做法見 [`MATCHING_HTML.md`](./MATCHING_HTML.md)。
 - **資料不進 Git**：題庫資料放 vc66 的 resource-files volume，站台於 runtime 抓取。
   - 預設資料 URL：`https://resource-files-dev.starxinteractive.com/preview/knsh-math5.json`
   - 可用 `?data=<url>` 覆寫，或改 `index.html` 的 `<meta name="preview-data">`。
