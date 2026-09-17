@@ -412,7 +412,6 @@ function aiHtml(it) {
   return `<section class="ai" data-id="${esc(it.id)}">
     <div class="ai-head">用 Gemini AI 解題 <span class="ai-tag">需淺顯易懂</span></div>
     <div class="ai-actions">${genBtn}
-      <button type="button" class="ai-copy">複製提示詞</button>
       <span class="ai-state">${ex ? '已解題（保留，無需再按）' : ''}</span>
     </div>
     <div class="ai-out">${out}</div>
