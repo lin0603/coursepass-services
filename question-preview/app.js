@@ -676,13 +676,6 @@ el.list.addEventListener('click', async (event) => {
     event.preventDefault();
     const ov = document.getElementById('figZoom');
     if (!ov) return;
-    const col = figLink.closest('.col-left');
-    const r = col.getBoundingClientRect();
-    const top = Math.max(8, r.top);
-    ov.style.left = Math.max(8, r.left) + 'px';
-    ov.style.width = r.width + 'px';
-    ov.style.top = top + 'px';
-    ov.style.height = Math.min(window.innerHeight - top - 16, window.innerHeight * 0.92) + 'px';
     ov.querySelector('img').src = figLink.getAttribute('href');
     ov.hidden = false;
     return;
