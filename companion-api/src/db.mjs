@@ -59,7 +59,10 @@ const reviewCols = db.prepare('PRAGMA table_info(reviews)').all().map((c) => c.n
 if (!reviewCols.includes('type')) db.exec('ALTER TABLE reviews ADD COLUMN type TEXT');
 if (!reviewCols.includes('typeMismatch')) db.exec('ALTER TABLE reviews ADD COLUMN typeMismatch INTEGER DEFAULT 0');
 // 課程欄位（多課程）
-for (const [table, col] of [['question_reviews', 'courseId'], ['assignments', 'courseId']]) {
+for (const [table, col] of [['question_reviews', 'courseId'], ['assignments', 'courseId'],
+  ['question_reviews', 'aiStatus'], ['question_reviews', 'aiNote'],
+  ['question_revisions', 'reason'],
+  ['explanations', 'reviewStatus'], ['explanations', 'regeneratedAt']]) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
   if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
 }
@@ -145,12 +148,26 @@ export const store = {
   listExplanations() {
     return db.prepare('SELECT sourceQuestionId, model, explanation, updatedAt FROM explanations ORDER BY updatedAt').all();
   },
-  upsertExplanation({ sourceQuestionId, model, explanation }) {
-    const row = { sourceQuestionId, model: model || null, explanation: explanation || '', updatedAt: now() };
-    db.prepare(`INSERT INTO explanations (sourceQuestionId,model,explanation,updatedAt) VALUES (?,?,?,?)
-                ON CONFLICT(sourceQuestionId) DO UPDATE SET model=excluded.model, explanation=excluded.explanation, updatedAt=excluded.updatedAt`)
-      .run(row.sourceQuestionId, row.model, row.explanation, row.updatedAt);
+  upsertExplanation({ sourceQuestionId, model, explanation, reviewStatus, regeneratedAt }) {
+    const row = { sourceQuestionId, model: model || null, explanation: explanation || '', updatedAt: now(), reviewStatus: reviewStatus ?? null, regeneratedAt: regeneratedAt ?? null };
+    db.prepare(`INSERT INTO explanations (sourceQuestionId,model,explanation,updatedAt,reviewStatus,regeneratedAt) VALUES (?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId) DO UPDATE SET model=excluded.model, explanation=excluded.explanation, updatedAt=excluded.updatedAt, reviewStatus=excluded.reviewStatus, regeneratedAt=excluded.regeneratedAt`)
+      .run(row.sourceQuestionId, row.model, row.explanation, row.updatedAt, row.reviewStatus, row.regeneratedAt);
     return row;
+  },
+  explanationQueue() {
+    return db.prepare("SELECT sourceQuestionId, model, explanation, regeneratedAt FROM explanations WHERE reviewStatus='needs_review' ORDER BY updatedAt DESC").all();
+  },
+  aiAdjustQueue(limit = 50) {
+    return db.prepare("SELECT sourceQuestionId, reviewerId, aiNote FROM question_reviews WHERE aiStatus='adjust' ORDER BY updatedAt LIMIT ?").all(limit);
+  },
+  clearAiAdjust(sourceQuestionId) {
+    db.prepare("UPDATE question_reviews SET aiStatus='', aiNote='' WHERE sourceQuestionId=?").run(sourceQuestionId);
+  },
+  reviewRevision({ sourceQuestionId, version, status, reason }) {
+    db.prepare('UPDATE question_revisions SET status=?, reason=? WHERE sourceQuestionId=? AND version=?').run(status, reason || '', sourceQuestionId, version);
+    if (status === 'approved') db.prepare("UPDATE question_revisions SET status='superseded' WHERE sourceQuestionId=? AND version<>?").run(sourceQuestionId, version);
+    return this.listRevisions({ sourceQuestionId });
   },
 
   // ---- 審查人 ----
@@ -224,7 +241,7 @@ export const store = {
                        FROM question_reviews ${clause} ORDER BY updatedAt DESC`)
       .all(...params).map((r) => ({ ...r, typeMismatch: !!r.typeMismatch }));
   },
-  upsertQuestionReview({ sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, courseId }) {
+  upsertQuestionReview({ sourceQuestionId, reviewerId, nodeId, status, note, type, typeMismatch, courseId, aiStatus, aiNote }) {
     const existing = this.getQuestionReview(sourceQuestionId, reviewerId);
     const row = {
       sourceQuestionId, reviewerId,
@@ -234,11 +251,13 @@ export const store = {
       type: type ?? (existing ? existing.type : null),
       typeMismatch: (typeMismatch ?? (existing ? existing.typeMismatch : false)) ? 1 : 0,
       courseId: courseId ?? (existing ? existing.courseId : null),
+      aiStatus: aiStatus ?? (existing ? existing.aiStatus : null),
+      aiNote: aiNote ?? (existing ? existing.aiNote : null),
       updatedAt: now(),
     };
-    db.prepare(`INSERT INTO question_reviews (sourceQuestionId,reviewerId,nodeId,status,note,type,typeMismatch,courseId,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(sourceQuestionId, reviewerId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, typeMismatch=excluded.typeMismatch, courseId=excluded.courseId, updatedAt=excluded.updatedAt`)
-      .run(row.sourceQuestionId, row.reviewerId, row.nodeId, row.status, row.note, row.type, row.typeMismatch, row.courseId, row.updatedAt);
+    db.prepare(`INSERT INTO question_reviews (sourceQuestionId,reviewerId,nodeId,status,note,type,typeMismatch,courseId,aiStatus,aiNote,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId, reviewerId) DO UPDATE SET nodeId=excluded.nodeId, status=excluded.status, note=excluded.note, type=excluded.type, typeMismatch=excluded.typeMismatch, courseId=excluded.courseId, aiStatus=excluded.aiStatus, aiNote=excluded.aiNote, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.reviewerId, row.nodeId, row.status, row.note, row.type, row.typeMismatch, row.courseId, row.aiStatus, row.aiNote, row.updatedAt);
     if (reviewerId) this.markAssignmentDone(sourceQuestionId, reviewerId);
     const changed = !existing
       || String(existing.status ?? '') !== String(row.status ?? '')

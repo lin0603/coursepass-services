@@ -95,3 +95,22 @@ export async function rewriteQuestion(input = {}) {
   try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { prompt: text, options: [], answer: '', rationale: '' }; }
   return { model: config.geminiModel, revision: parsed };
 }
+
+
+// 依老師對上一版解題的意見，重新產生 AI 解題（不走快取；不覆寫 id 快取）
+export async function regenerateExplanation(input = {}) {
+  if (!config.geminiApiKey) throw new Error('gemini key not configured (set GEMINI_API_KEY)');
+  const text = buildUserText(input) + (input.note ? `\n老師對上一版解題的意見（請據此改進）：${input.note}` : '');
+  const hint = typeHint(input.type);
+  const body = {
+    systemInstruction: { parts: [{ text: hint ? `${SYSTEM_PROMPT}\n${hint}` : SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+  };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  const explanation = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
+  return { model: config.geminiModel, explanation };
+}

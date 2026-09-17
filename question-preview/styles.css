@@ -222,3 +222,8 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 
 .rv-noterow { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
 .rv-note-hint { font-size: 12px; color: #8b93a5; }
+
+.ai-review { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ai-review-state { font-size: 12px; color: #236251; }
+.rv-note-inline { width: 100%; margin-top: 6px; border: 1px solid #bed4d7; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; }
+.rev-actions { display: flex; gap: 8px; margin-top: 6px; }

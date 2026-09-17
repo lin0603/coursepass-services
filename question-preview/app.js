@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -20,6 +20,7 @@ const el = {
   assignPanel: document.getElementById('assignPanel'),
   viewAll: document.getElementById('viewAll'),
   viewMine: document.getElementById('viewMine'),
+  viewQueue: document.getElementById('viewQueue'),
   loginGate: document.getElementById('loginGate'),
   loginCode: document.getElementById('loginCode'),
   loginBtn: document.getElementById('loginBtn'),
@@ -347,18 +348,23 @@ function appViewHtml(it) {
 function revisionHtml(it) {
   const revs = state.revisions[it.id] || [];
   const list = revs.map((r) => {
-    const st = r.status === 'approved' ? '已採納' : (r.status === 'superseded' ? '已被取代' : '待複審');
+    const st = r.status === 'approved' ? '合格' : (r.status === 'superseded' ? '已被取代' : (r.status === 'adjust' ? '需調整' : '待複審'));
     const opts = (r.payload.options || []).map((o, i) => `${LETTERS[i]}. ${esc(o)}`).join('<br>');
     return `<div class="rev-item ${esc(r.status)}">
       <div class="rev-head">v${r.version} · ${st}${r.model ? ' · ' + esc(r.model) : ''}</div>
       <div class="rev-body"><b>題目：</b>${esc(r.payload.prompt || '')}${opts ? '<br>' + opts : ''}${r.payload.answer ? '<br><b>答案：</b>' + esc(r.payload.answer) : ''}</div>
       ${r.rationale ? `<div class="rev-why">改寫理由：${esc(r.rationale)}</div>` : ''}
-      ${r.status === 'proposed' ? `<button type="button" class="mini-btn rv-approve" data-rev-id="${esc(it.id)}" data-version="${r.version}">採納此版本</button>` : ''}
+      ${r.reason ? `<div class="rev-why">需調整原因：${esc(r.reason)}</div>` : ''}
+      ${(r.status === 'proposed' || r.status === 'adjust') ? `<div class="rev-actions">
+        <button type="button" class="mini-btn on rv-rev-ok" data-rev-id="${esc(it.id)}" data-version="${r.version}">合格</button>
+        <button type="button" class="mini-btn rv-rev-adjust" data-rev-id="${esc(it.id)}" data-version="${r.version}">需調整</button>
+      </div>` : ''}
     </div>`;
   }).join('');
   return `<section class="ai ai-rev" data-id="${esc(it.id)}">
     <div class="ai-head">AI 改寫建議 <span class="ai-tag">依審查意見</span></div>
     <div class="ai-actions"><button type="button" class="ai-gen rev-gen">產生改寫</button><span class="ai-state rev-state"></span></div>
+    <input class="rev-reason rv-note-inline" placeholder="對改寫的意見（需調整時填寫）">
     <div class="rev-list">${list || '<span class="ai-none">尚無改寫版本</span>'}</div>
   </section>`;
 }
@@ -409,12 +415,21 @@ function aiHtml(it) {
   const ex = state.explanations[it.id];
   const out = ex ? esc(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解題（可先按「產生解題」）</span>';
   const genBtn = ex ? '' : '<button type="button" class="ai-gen">產生解題</button>';
+  const mine = reviewOf(it.id);
+  const ai = mine.aiStatus || '';
+  const review = ex ? `<div class="ai-review">
+      <button type="button" class="rv-btn ai-ok${ai === 'approved' ? ' on' : ''}">合格</button>
+      <button type="button" class="rv-btn ai-adjust${ai === 'adjust' ? ' on' : ''}">需調整</button>
+      <span class="ai-review-state">${ai === 'approved' ? 'AI解題：合格' : ai === 'adjust' ? 'AI解題：需調整' : ''}</span>
+    </div>
+    <input class="ai-note rv-note-inline" placeholder="對 AI 解題的意見（需調整時填寫）" value="${esc(mine.aiNote || '')}">` : '';
   return `<section class="ai" data-id="${esc(it.id)}">
     <div class="ai-head">用 Gemini AI 解題 <span class="ai-tag">需淺顯易懂</span></div>
     <div class="ai-actions">${genBtn}
       <span class="ai-state">${ex ? '已解題（保留，無需再按）' : ''}</span>
     </div>
     <div class="ai-out">${out}</div>
+    ${review}
   </section>`;
 }
 
@@ -448,6 +463,8 @@ function render() {
     if (!state.me) { el.subtitle.textContent = '請先選擇審查人'; el.list.innerHTML = '<p class="app-none">請先在上方「審查人」選擇你的名字。</p>'; return; }
     const order = myPendingOrder();
     list = list.filter((it) => order.has(it.id)).sort((a, b) => order.get(a.id) - order.get(b.id));
+  } else if (state.view === 'queue') {
+    list = list.filter((it) => state.explanationQueue[it.id]);
   }
   el.list.innerHTML = '';
   const slice = list.slice(0, state.limit);
@@ -468,6 +485,7 @@ function render() {
         <span class="badge node">${esc(it.node || '未綁定')} ${esc(it.nodeName || '')}</span>
         <span class="badge diff">難度 ${esc(it.difficulty ?? '')}</span>
         ${((state.quality[it.id] || {}).status === 'needs_review') ? `<span class="badge qbad" title="${esc(((state.quality[it.id] || {}).reasons || []).join(', '))}">品質需檢查</span>` : ''}
+        ${state.explanationQueue[it.id] ? '<span class="badge qbad" title="AI 解題已重生成，需重審">AI需重審</span>' : ''}
         ${assignHtml(it.id)}
         <span class="badge rv rv-${esc(rev.status || 'none')}">${REVIEW_LABELS[rev.status || '']}</span>
       </div>
@@ -509,6 +527,8 @@ function render() {
   if (state.view === 'mine') {
     const done = allAssignments().filter((a) => a.reviewerId === state.me && a.status === 'done').length;
     el.subtitle.textContent = `我的待審 ${list.length.toLocaleString()} 題 · 已審 ${done} 題`;
+  } else if (state.view === 'queue') {
+    el.subtitle.textContent = `AI 需重審 ${list.length.toLocaleString()} 題`;
   } else {
     el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
   }
@@ -519,8 +539,10 @@ function fill(sel, values, label) {
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
-async function saveReview(id, nodeId, status, note, type, typeMismatch) {
+async function saveReview(id, nodeId, status, note, type, typeMismatch, aiStatus, aiNote) {
   const payload = { note, nodeId, type: type || '', typeMismatch: !!typeMismatch, reviewerId: state.me || '', courseId: state.courseId || undefined };
+  if (aiStatus !== undefined) payload.aiStatus = aiStatus;
+  if (aiNote !== undefined) payload.aiNote = aiNote;
   if (status) payload.status = status; // 空字串會被後端視為非法 enum，省略
   const res = await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}`, {
     method: 'PUT',
@@ -590,6 +612,47 @@ el.list.addEventListener('click', async (event) => {
     }
     state.matchingPlay[id] = play;
     render();
+    return;
+  }
+  const aiOk = event.target.closest('.ai-ok');
+  const aiAdjust = event.target.closest('.ai-adjust');
+  if (aiOk || aiAdjust) {
+    const section = (aiOk || aiAdjust).closest('.ai');
+    const id = section.dataset.id;
+    const stEl = section.querySelector('.ai-review-state');
+    if (!state.me) { stEl.textContent = '請先選擇審查人'; return; }
+    const item = state.items.find((i) => i.id === id);
+    const cur = reviewOf(id);
+    const aiStatus = aiOk ? 'approved' : 'adjust';
+    const aiNote = section.querySelector('.ai-note').value;
+    try {
+      const saved = await saveReview(id, item ? item.node : undefined, cur.status || '', cur.note || '', cur.type || '', cur.typeMismatch, aiStatus, aiNote);
+      const rows = state.qreviews[id] || [];
+      state.qreviews[id] = rows.filter((r) => r.reviewerId !== state.me).concat({ reviewerId: state.me, status: saved.status, note: saved.note, type: saved.type, typeMismatch: saved.typeMismatch, aiStatus: saved.aiStatus, aiNote: saved.aiNote, updatedAt: saved.updatedAt });
+      stEl.textContent = aiStatus === 'approved' ? 'AI解題：合格' : 'AI解題：需調整';
+      section.querySelector('.ai-ok').classList.toggle('on', aiStatus === 'approved');
+      section.querySelector('.ai-adjust').classList.toggle('on', aiStatus === 'adjust');
+    } catch (e) { stEl.textContent = '失敗：' + e.message; }
+    return;
+  }
+  const revOk = event.target.closest('.rv-rev-ok');
+  const revAdjust = event.target.closest('.rv-rev-adjust');
+  if (revOk || revAdjust) {
+    const btn = revOk || revAdjust;
+    const id = btn.dataset.revId;
+    const version = Number(btn.dataset.version);
+    const section = btn.closest('.ai-rev');
+    const reason = section.querySelector('.rev-reason') ? section.querySelector('.rev-reason').value : '';
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/rewrites/${encodeURIComponent(id)}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ version, status: revOk ? 'approved' : 'adjust', reason }),
+      });
+      const d2 = await res.json();
+      if (!res.ok) throw new Error(d2.error || res.status);
+      state.revisions[id] = d2.items || [];
+      render();
+    } catch (e) { alert('儲存失敗：' + e.message); }
     return;
   }
   const noteSaveBtn = event.target.closest('.rv-note-save');
@@ -908,10 +971,12 @@ const setMatchView = (v) => {
   state.view = v; state.limit = 100;
   if (el.viewAll) el.viewAll.classList.toggle('on', v === 'all');
   if (el.viewMine) el.viewMine.classList.toggle('on', v === 'mine');
+  if (el.viewQueue) el.viewQueue.classList.toggle('on', v === 'queue');
   render();
 };
 if (el.viewAll) el.viewAll.addEventListener('click', () => setMatchView('all'));
 if (el.viewMine) el.viewMine.addEventListener('click', () => setMatchView('mine'));
+if (el.viewQueue) el.viewQueue.addEventListener('click', () => setMatchView('queue'));
 el.assignPanel.addEventListener('click', (e) => {
   if (e.target.id === 'asgPreview') runAssign(true);
   if (e.target.id === 'asgCreate') runAssign(false);
@@ -994,7 +1059,7 @@ function renderCourseSelector(courses, course) {
 
 async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUALITY_URL) {
   try {
-    const [d, app, match, rev, expl, explApi, rvs, asg, qual, rews] = await Promise.all([
+    const [d, app, match, rev, expl, explApi, rvs, asg, qual, rews, explQ] = await Promise.all([
       fetch(DATA_URL).then((r) => r.json()),
       fetch(APP_DATA_URL).then((r) => r.json()).catch(() => ({ items: {} })),
       fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
@@ -1005,6 +1070,7 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
       fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
       QUALITY_URL ? fetch(QUALITY_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
       fetch(`${REVIEWS_API}/v1/rewrites`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+      fetch(`${REVIEWS_API}/v1/explanations/queue`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
     ]);
     state.items = d.items;
     state.appdata = app.items || {};
@@ -1013,6 +1079,8 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
     state.quality = qual.items || {};
     state.revisions = {};
     for (const rv of (rews.items || [])) (state.revisions[rv.sourceQuestionId] = state.revisions[rv.sourceQuestionId] || []).push(rv);
+    state.explanationQueue = {};
+    for (const q of (explQ.items || [])) state.explanationQueue[q.sourceQuestionId] = q;
     state.qreviews = {};
     for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
     state.reviewers = rvs.items || [];

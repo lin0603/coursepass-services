@@ -8,7 +8,7 @@ import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
-import { explainQuestion, rewriteQuestion } from './explain.mjs';
+import { explainQuestion, regenerateExplanation, rewriteQuestion } from './explain.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -182,6 +182,31 @@ app.post('/v1/explain', asyncHandler(async (req, res) => {
   res.json(await explainQuestion(parsed.data));
 }));
 
+// AI 解題「需重審」佇列
+app.get('/v1/explanations/queue', (_req, res) => res.json({ items: store.explanationQueue() }));
+
+// 每日重生成 AI 解題（依老師的 需調整 意見）；產生後標記為需重審
+app.post('/v1/explanations/refresh', asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(Number((req.body || {}).limit) || 20, 1), 200);
+  const queue = store.aiAdjustQueue(limit);
+  if (!queue.length) return res.json({ refreshed: 0, remaining: 0 });
+  const data = await fetch(config.explainDataUrl).then((r) => r.json()).catch(() => ({ items: [] }));
+  const byId = {};
+  for (const it of (data.items || [])) byId[it.id] = it;
+  let refreshed = 0;
+  for (const row of queue) {
+    const q = byId[row.sourceQuestionId];
+    if (!q) continue;
+    try {
+      const out = await regenerateExplanation({ prompt: String(q.prompt || '').replace(/<[^>]+>/g, ''), answer: q.answer, type: q.type, options: (q.options || []).map((o) => (typeof o === 'object' ? o.content : o)).filter(Boolean), note: row.aiNote });
+      store.upsertExplanation({ sourceQuestionId: row.sourceQuestionId, model: out.model, explanation: out.explanation, reviewStatus: 'needs_review', regeneratedAt: new Date().toISOString() });
+      store.clearAiAdjust(row.sourceQuestionId);
+      refreshed += 1;
+    } catch (e) { console.error('refresh failed', row.sourceQuestionId, e.message); }
+  }
+  res.json({ refreshed, remaining: store.aiAdjustQueue(1).length ? 1 : 0 });
+}));
+
 // 已解題過的清單（前端載入後就不必再按「產生解題」）
 app.get('/v1/explanations', (_req, res) => {
   const items = {};
@@ -199,6 +224,8 @@ const reviewSchema = z.object({
   nodeId: z.string().max(64).optional(),
   reviewerId: z.string().max(64).optional(),
   courseId: z.string().max(64).optional(),
+  aiStatus: z.enum(['', 'approved', 'adjust']).optional(),
+  aiNote: z.string().max(2000).optional(),
 });
 
 // 匯出（給 AI 後續優化題目用）：結構化審查意見
@@ -237,6 +264,13 @@ app.post('/v1/rewrites/:id', asyncHandler(async (req, res) => {
   const row = store.addRevision({ sourceQuestionId: req.params.id, courseId: parsed.data.courseId, payload: out.revision, rationale: out.revision.rationale, model: out.model });
   res.status(201).json(row);
 }));
+app.post('/v1/rewrites/:id/review', (req, res) => {
+  const b = req.body || {};
+  const version = Number(b.version);
+  const status = b.status === 'approved' ? 'approved' : 'adjust';
+  if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
+  res.json({ items: store.reviewRevision({ sourceQuestionId: req.params.id, version, status, reason: b.reason }) });
+});
 app.post('/v1/rewrites/:id/approve', (req, res) => {
   const version = Number((req.body || {}).version);
   if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
@@ -254,7 +288,7 @@ app.put('/v1/reviews/:id', (req, res) => {
   const parsed = reviewSchema.safeParse(body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
   const reviewerId = parsed.data.reviewerId || '';
-  res.json(store.upsertQuestionReview({ sourceQuestionId: req.params.id, reviewerId, nodeId: parsed.data.nodeId, status: parsed.data.status, note: parsed.data.note, type: parsed.data.type, typeMismatch: parsed.data.typeMismatch, courseId: parsed.data.courseId }));
+  res.json(store.upsertQuestionReview({ sourceQuestionId: req.params.id, reviewerId, nodeId: parsed.data.nodeId, status: parsed.data.status, note: parsed.data.note, type: parsed.data.type, typeMismatch: parsed.data.typeMismatch, courseId: parsed.data.courseId, aiStatus: parsed.data.aiStatus, aiNote: parsed.data.aiNote }));
 });
 app.delete('/v1/reviews/:id', (req, res) => {
   const reviewerId = req.query.reviewer || '';

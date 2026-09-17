@@ -20,6 +20,8 @@ config.geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 config.previewPasscode = process.env.PREVIEW_PASSCODE || '';
 // 管理者密碼（可看資源索引／來源資源包）；未設＝沿用通行碼
 config.adminPasscode = process.env.ADMIN_PASSCODE || '';
+// 每日重生成 AI 解題：題庫資料來源（id → 題目內容）
+config.explainDataUrl = process.env.EXPLAIN_DATA_URL || `${config.filesBase}/preview/knsh-math5.json`;
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 export const dbPath = path.join(config.dataDir, 'companion.sqlite');
