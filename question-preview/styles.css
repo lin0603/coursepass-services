@@ -219,3 +219,6 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .rev-body { font-size: 13px; line-height: 1.6; color: #1f2b2a; }
 .rev-why { font-size: 12px; color: #8a5a12; margin-top: 4px; }
 .rv-approve { margin-top: 6px; }
+
+.rv-noterow { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.rv-note-hint { font-size: 12px; color: #8b93a5; }

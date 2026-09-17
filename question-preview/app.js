@@ -385,7 +385,8 @@ function reviewHtml(it) {
       <div class="rv-label">題型</div>
       <div class="rv-btns">${typeBtns}<span class="rv-hint">★ 目前題型（不適合才需改選）</span></div>
     </div>
-    <textarea class="rv-note" rows="2" placeholder="調整註解／原因（會存到雲端）">${esc(r.note || '')}</textarea>
+    <textarea class="rv-note" rows="2" placeholder="調整註解／原因（離開欄位會自動儲存）">${esc(r.note || '')}</textarea>
+    <div class="rv-noterow"><button type="button" class="rv-btn rv-note-save">儲存註解</button><span class="rv-note-hint">離開欄位會自動儲存，也可按此立即儲存</span></div>
     ${othersHtml(it.id)}
     <button type="button" class="rv-btn rv-history">查看審查歷史</button>
     <div class="rv-history-box" hidden></div>
@@ -590,6 +591,22 @@ el.list.addEventListener('click', async (event) => {
     }
     state.matchingPlay[id] = play;
     render();
+    return;
+  }
+  const noteSaveBtn = event.target.closest('.rv-note-save');
+  if (noteSaveBtn) {
+    const section = noteSaveBtn.closest('.review');
+    const id = section.dataset.id;
+    const stateEl = section.querySelector('.rv-state');
+    if (!state.me) { stateEl.textContent = '請先選擇審查人'; return; }
+    const item = state.items.find((i) => i.id === id);
+    const cur = reviewOf(id);
+    try {
+      const saved = await saveReview(id, item ? item.node : undefined, cur.status || '', section.querySelector('.rv-note').value, cur.type || '', cur.typeMismatch);
+      const rows = state.qreviews[id] || [];
+      state.qreviews[id] = rows.filter((r) => r.reviewerId !== state.me).concat({ reviewerId: state.me, status: saved.status, note: saved.note, type: saved.type, typeMismatch: saved.typeMismatch, updatedAt: saved.updatedAt });
+      stateEl.textContent = '已儲存 ✓';
+    } catch (e) { stateEl.textContent = '失敗：' + e.message; }
     return;
   }
   const histBtn = event.target.closest('.rv-history');
