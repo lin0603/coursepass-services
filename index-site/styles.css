@@ -187,3 +187,13 @@ select.mini-btn { padding: 4px 10px; }
 .help-body ul { margin: 4px 0 4px 20px; }
 .help-body code { background: #eef4f1; border-radius: 4px; padding: 1px 5px; }
 .help-tip { margin-top: 14px; padding: 8px 10px; background: #f7fafc; border: 1px dashed #cbd5d1; border-radius: 8px; color: #42606a; }
+
+/* 主管指標 */
+.metrics { margin-bottom: 14px; }
+.metric-heads { display: grid; grid-template-columns: repeat(3, minmax(160px, 240px)); gap: 12px; margin-bottom: 12px; }
+.metric { background: #171b24; border: 1px solid #2a3140; border-radius: 12px; padding: 12px 14px; }
+.m-num { font-size: 26px; font-weight: 800; color: #57d9a3; }
+.m-lbl { color: #e6e9ef; font-size: 13px; margin-top: 2px; }
+.m-sub { color: #8b93a5; font-size: 12px; }
+.metric-block { margin-bottom: 12px; }
+.metric-block b { display: block; margin-bottom: 6px; color: #e6e9ef; font-size: 13px; }

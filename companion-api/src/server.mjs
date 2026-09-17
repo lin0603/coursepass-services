@@ -8,7 +8,7 @@ import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
-import { explainQuestion } from './explain.mjs';
+import { explainQuestion, rewriteQuestion } from './explain.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -216,6 +216,32 @@ app.get('/v1/reviews/export', (req, res) => {
 });
 app.get('/v1/reviews', (req, res) => res.json({ items: store.listQuestionReviews({ sourceQuestionId: req.query.question, reviewerId: req.query.reviewer }) }));
 app.get('/v1/reviews/consensus', (_req, res) => res.json({ items: store.consensus() }));
+
+// ---- 主管指標 ----
+app.get('/v1/metrics', (_req, res) => res.json(store.metrics()));
+
+// ---- AI 優化迴路：改寫版本 ----
+const rewriteSchema = z.object({
+  prompt: z.string().max(4000).optional(),
+  options: z.array(z.string().max(500)).max(8).optional(),
+  answer: z.string().max(2000).optional(),
+  type: z.string().max(64).optional(),
+  notes: z.union([z.string().max(4000), z.array(z.string().max(2000))]).optional(),
+  courseId: z.string().max(64).optional(),
+});
+app.get('/v1/rewrites', (req, res) => res.json({ items: store.listRevisions({ sourceQuestionId: req.query.question }) }));
+app.post('/v1/rewrites/:id', asyncHandler(async (req, res) => {
+  const parsed = rewriteSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  const out = await rewriteQuestion(parsed.data);
+  const row = store.addRevision({ sourceQuestionId: req.params.id, courseId: parsed.data.courseId, payload: out.revision, rationale: out.revision.rationale, model: out.model });
+  res.status(201).json(row);
+}));
+app.post('/v1/rewrites/:id/approve', (req, res) => {
+  const version = Number((req.body || {}).version);
+  if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
+  res.json({ items: store.approveRevision({ sourceQuestionId: req.params.id, version }) });
+});
 app.get('/v1/reviews/:id/history', (req, res) => res.json({ items: store.reviewHistory(req.params.id) }));
 app.get('/v1/reviews/:id', (req, res) => {
   const items = store.listQuestionReviews({ sourceQuestionId: req.params.id });

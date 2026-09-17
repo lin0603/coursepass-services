@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -266,6 +266,18 @@ function normalizeAnswer(s) {
   return String(s ?? '').replace(/\s+/g, '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248)).replace(/[，,]/g, '');
 }
 
+// 答錯時的「解題重點」短提示（約 30 字；取自已產生的 AI 解題，沒有則給引導）
+function hintHtml(it) {
+  let h = '';
+  const ex = state.explanations[it.id];
+  if (ex) {
+    h = String(ex).replace(/\s+/g, ' ').replace(/答案[:：][\s\S]*$/, '').trim();
+    if (h.length > 34) h = h.slice(0, 34) + '…';
+  }
+  if (!h) h = '先圈出題目關鍵字，再對照選項差異。';
+  return `<p class="app-hint">解題重點：${esc(h)}</p>`;
+}
+
 // 點選題（測驗模式可點、有回饋；解答模式顯示正解）
 function choiceHtml(it, a, quiz) {
   const play = state.play[it.id] || {};
@@ -280,7 +292,7 @@ function choiceHtml(it, a, quiz) {
   let fb = '';
   if (quiz && answered) {
     const ok = play.choice === a.correctIndex;
-    fb = `<p class="app-feedback${ok ? '' : ' bad'}">${ok ? '答對了！' : `答錯了，正解是 ${LETTERS[a.correctIndex]}`}</p>`;
+    fb = ok ? '<p class="app-feedback">答對了！</p>' : `<p class="app-feedback bad">答錯了，正解是 ${LETTERS[a.correctIndex]}</p>${hintHtml(it)}`;
   }
   return `<div class="app-opts">${opts}</div>${fb}`;
 }
@@ -292,7 +304,7 @@ function fillHtml(it, a, quiz) {
   if (!quiz) return `<p class="app-correct">答案：${esc(accept.join('、'))}</p>`;
   const val = play.fill ?? '';
   const checked = play.fillChecked;
-  const fb = checked ? `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${esc(accept.join('、'))}）`}</p>` : '';
+  const fb = checked ? (play.fillOk ? '<p class="app-feedback">答對了！</p>' : `<p class="app-feedback bad">再想想（正解：${esc(accept.join('、'))}）</p>${hintHtml(it)}`) : '';
   return `<div class="app-fill1"><input class="app-input app-fill-input" data-qid="${esc(it.id)}" value="${esc(val)}" placeholder="輸入答案"><button type="button" class="app-check" data-qid="${esc(it.id)}">檢查</button></div>${fb}`;
 }
 
@@ -330,6 +342,25 @@ function appViewHtml(it) {
     ? `<div class="app-expl"><b>AI 解題</b><br>${esc(state.explanations[it.id]).replace(/\n/g, '<br>')}</div>` : '';
   return `<section class="app-view"><div class="app-head">App 呈現 <span class="app-label">${label}</span></div>
     <div class="app-phone">${promptBlock}${fig}${body}${expl}</div></section>`;
+}
+
+function revisionHtml(it) {
+  const revs = state.revisions[it.id] || [];
+  const list = revs.map((r) => {
+    const st = r.status === 'approved' ? '已採納' : (r.status === 'superseded' ? '已被取代' : '待複審');
+    const opts = (r.payload.options || []).map((o, i) => `${LETTERS[i]}. ${esc(o)}`).join('<br>');
+    return `<div class="rev-item ${esc(r.status)}">
+      <div class="rev-head">v${r.version} · ${st}${r.model ? ' · ' + esc(r.model) : ''}</div>
+      <div class="rev-body"><b>題目：</b>${esc(r.payload.prompt || '')}${opts ? '<br>' + opts : ''}${r.payload.answer ? '<br><b>答案：</b>' + esc(r.payload.answer) : ''}</div>
+      ${r.rationale ? `<div class="rev-why">改寫理由：${esc(r.rationale)}</div>` : ''}
+      ${r.status === 'proposed' ? `<button type="button" class="mini-btn rv-approve" data-rev-id="${esc(it.id)}" data-version="${r.version}">採納此版本</button>` : ''}
+    </div>`;
+  }).join('');
+  return `<section class="ai ai-rev" data-id="${esc(it.id)}">
+    <div class="ai-head">AI 改寫建議 <span class="ai-tag">依審查意見</span></div>
+    <div class="ai-actions"><button type="button" class="ai-gen rev-gen">產生改寫</button><span class="ai-state rev-state"></span></div>
+    <div class="rev-list">${list || '<span class="ai-none">尚無改寫版本</span>'}</div>
+  </section>`;
 }
 
 function reviewHtml(it) {
@@ -456,6 +487,7 @@ function render() {
         </div>
         <div class="col-ai">
           ${aiHtml(it)}
+          ${revisionHtml(it)}
         </div>
       </div>`;
     frag.appendChild(card);
@@ -592,6 +624,46 @@ el.list.addEventListener('click', async (event) => {
     const ok = (a.accept || []).some((x) => normalizeAnswer(x) === val);
     state.play[qid] = { ...(state.play[qid] || {}), fillChecked: true, fillOk: ok };
     render();
+    return;
+  }
+  const revGen = event.target.closest('.rev-gen');
+  if (revGen) {
+    const section = revGen.closest('.ai-rev');
+    const id = section.dataset.id;
+    const item = state.items.find((i) => i.id === id);
+    const a = state.appdata[id] || {};
+    const st = section.querySelector('.rev-state');
+    const notes = [];
+    const mine = reviewOf(id); if (mine.note) notes.push(`（我）${mine.note}`);
+    for (const o of othersOf(id)) if (o.note) notes.push(`${reviewerName(o.reviewerId)}：${o.note}`);
+    if (mine.typeMismatch && mine.type) notes.push(`建議題型：${typeLabel(mine.type)}`);
+    st.textContent = '產生中…'; revGen.disabled = true;
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/rewrites/${encodeURIComponent(id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ prompt: stripHtml(item.prompt), options: optionsOf(item), answer: deFull(item.answer), type: a.type || item.type, notes, courseId: state.courseId || undefined }),
+      });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || res.status);
+      (state.revisions[id] = state.revisions[id] || []).unshift(r);
+      st.textContent = `已產生 v${r.version}`;
+      render();
+    } catch (e) { st.textContent = '失敗：' + e.message; revGen.disabled = false; }
+    return;
+  }
+  const approveBtn = event.target.closest('.rv-approve');
+  if (approveBtn) {
+    const id = approveBtn.dataset.revId;
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/rewrites/${encodeURIComponent(id)}/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ version: Number(approveBtn.dataset.version) }),
+      });
+      const d2 = await res.json();
+      if (!res.ok) throw new Error(d2.error || res.status);
+      state.revisions[id] = d2.items || [];
+      render();
+    } catch (e) { alert('採納失敗：' + e.message); }
     return;
   }
   const aiGen = event.target.closest('.ai-gen');
@@ -906,7 +978,7 @@ function renderCourseSelector(courses, course) {
 
 async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUALITY_URL) {
   try {
-    const [d, app, match, rev, expl, explApi, rvs, asg, qual] = await Promise.all([
+    const [d, app, match, rev, expl, explApi, rvs, asg, qual, rews] = await Promise.all([
       fetch(DATA_URL).then((r) => r.json()),
       fetch(APP_DATA_URL).then((r) => r.json()).catch(() => ({ items: {} })),
       fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
@@ -916,12 +988,15 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
       fetch(`${REVIEWS_API}/v1/reviewers`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
       fetch(`${REVIEWS_API}/v1/assignments`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
       QUALITY_URL ? fetch(QUALITY_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
+      fetch(`${REVIEWS_API}/v1/rewrites`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
     ]);
     state.items = d.items;
     state.appdata = app.items || {};
     state.matching = match.items || {};
     state.explanations = { ...(expl.items || {}), ...(explApi.items || {}) };
     state.quality = qual.items || {};
+    state.revisions = {};
+    for (const rv of (rews.items || [])) (state.revisions[rv.sourceQuestionId] = state.revisions[rv.sourceQuestionId] || []).push(rv);
     state.qreviews = {};
     for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
     state.reviewers = rvs.items || [];

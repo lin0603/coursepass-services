@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS review_history (
   fromStatus TEXT, toStatus TEXT, fromType TEXT, toType TEXT, typeMismatch INTEGER, note TEXT, at TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_rhist_question ON review_history(sourceQuestionId);
+CREATE TABLE IF NOT EXISTS question_revisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, sourceQuestionId TEXT, courseId TEXT, version INTEGER,
+  payload TEXT, rationale TEXT, model TEXT, status TEXT DEFAULT 'proposed', createdAt TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_rev_q ON question_revisions(sourceQuestionId);
 CREATE INDEX IF NOT EXISTS ix_answers_learner ON answers(learnerId, createdAt);
 CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWrongAt);
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
@@ -270,6 +275,58 @@ export const store = {
       c.assigned = a.total; c.assignedDone = a.done;
     }
     return Object.values(map);
+  },
+
+  // ---- AI 優化迴路：改寫版本（可標版本、保留歷史）----
+  addRevision({ sourceQuestionId, courseId, payload, rationale, model }) {
+    const prev = db.prepare('SELECT MAX(version) m FROM question_revisions WHERE sourceQuestionId=?').get(sourceQuestionId).m || 0;
+    const version = prev + 1;
+    const now2 = now();
+    const info = db.prepare(`INSERT INTO question_revisions (sourceQuestionId,courseId,version,payload,rationale,model,status,createdAt)
+                             VALUES (?,?,?,?,?,?, 'proposed', ?)`)
+      .run(sourceQuestionId, courseId || null, version, JSON.stringify(payload || {}), rationale || '', model || null, now2);
+    return { id: info.lastInsertRowid, sourceQuestionId, courseId: courseId || null, version, payload, rationale, model, status: 'proposed', createdAt: now2 };
+  },
+  listRevisions({ sourceQuestionId } = {}) {
+    const where = sourceQuestionId ? 'WHERE sourceQuestionId=?' : '';
+    const params = sourceQuestionId ? [sourceQuestionId] : [];
+    return db.prepare(`SELECT id, sourceQuestionId, courseId, version, payload, rationale, model, status, createdAt
+                       FROM question_revisions ${where} ORDER BY sourceQuestionId, version DESC`)
+      .all(...params)
+      .map((r) => ({ ...r, payload: JSON.parse(r.payload || '{}') }));
+  },
+  approveRevision({ sourceQuestionId, version }) {
+    db.prepare("UPDATE question_revisions SET status='superseded' WHERE sourceQuestionId=? AND version<>?").run(sourceQuestionId, version);
+    db.prepare("UPDATE question_revisions SET status='approved' WHERE sourceQuestionId=? AND version=?").run(sourceQuestionId, version);
+    return this.listRevisions({ sourceQuestionId });
+  },
+  // ---- 主管指標：共識率 / 分歧題 / 每位老師產能與品質 ----
+  metrics() {
+    const rows = db.prepare('SELECT sourceQuestionId, courseId, reviewerId, status FROM question_reviews').all();
+    const byQ = {}; const byR = {};
+    for (const r of rows) {
+      (byQ[r.sourceQuestionId] = byQ[r.sourceQuestionId] || []).push(r);
+      const m = (byR[r.reviewerId] = byR[r.reviewerId] || { reviewerId: r.reviewerId, total: 0, approved: 0, adjust: 0, rejected: 0, pending: 0, disagree: 0 });
+      m.total += 1; const k = r.status || 'pending'; m[k] = (m[k] || 0) + 1;
+    }
+    for (const k of Object.keys(byR)) { const rv = this.getReviewer(k); byR[k].reviewerName = rv ? rv.name : (k ? k : '未署名'); }
+    const divergent = []; let multiN = 0; let consensusN = 0;
+    for (const [qid, list] of Object.entries(byQ)) {
+      if (list.length < 2) continue;
+      multiN += 1;
+      const statuses = [...new Set(list.map((x) => x.status || 'pending'))];
+      if (statuses.length === 1) consensusN += 1;
+      else {
+        divergent.push({ sourceQuestionId: qid, courseId: list[0].courseId, statuses });
+        for (const r of list) { if (byR[r.reviewerId]) byR[r.reviewerId].disagree += 1; }
+      }
+    }
+    return {
+      consensusRate: multiN ? Math.round((consensusN / multiN) * 1000) / 10 : 0,
+      multiReviewed: multiN, consensus: consensusN, divergentCount: divergent.length,
+      divergent: divergent.slice(0, 200),
+      reviewers: Object.values(byR).sort((a, b) => b.total - a.total),
+    };
   },
 
   // 共識聚合（供主編分流與 AI 優化）：每題的雙審結果

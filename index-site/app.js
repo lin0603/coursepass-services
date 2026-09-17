@@ -397,6 +397,24 @@ function renderResRows() {
   document.querySelectorAll('#resRows [data-archive]').forEach((b) => b.addEventListener('click', () => showView('browse', b.dataset.archive)));
 }
 
+function renderMetrics(m) {
+  const el2 = document.getElementById('metrics');
+  if (!el2) return;
+  if (!m || (!m.multiReviewed && !(m.reviewers || []).length)) { el2.innerHTML = ''; return; }
+  const divIds = (m.divergent || []).slice(0, 12).map((d) => `<span class="chip no" title="${escapeHtml((d.statuses || []).join('/'))}">${escapeHtml(d.sourceQuestionId)}</span>`).join(' ');
+  const rows = (m.reviewers || []).map((r) => `<tr><td>${escapeHtml(r.reviewerName || r.reviewerId || '未署名')}</td><td>${r.total || 0}</td><td>${r.approved || 0}</td><td>${r.adjust || 0}</td><td>${r.rejected || 0}</td><td>${r.disagree || 0}</td></tr>`).join('');
+  el2.innerHTML = `<div class="metric-heads">
+      <div class="metric"><div class="m-num">${m.consensusRate || 0}%</div><div class="m-lbl">共識率（雙審一致）</div><div class="m-sub">${m.consensus || 0} / ${m.multiReviewed || 0} 題</div></div>
+      <div class="metric"><div class="m-num">${m.divergentCount || 0}</div><div class="m-lbl">待處理分歧題</div><div class="m-sub">雙審結果不一致</div></div>
+      <div class="metric"><div class="m-num">${(m.reviewers || []).length}</div><div class="m-lbl">審查老師</div><div class="m-sub">有審查紀錄</div></div>
+    </div>
+    ${divIds ? `<div class="metric-block"><b>分歧題（前 12）</b><div class="chips">${divIds}</div></div>` : ''}
+    <div class="metric-block"><b>每位老師產能與品質</b>
+      <table class="res-table"><thead><tr><th>老師</th><th>已審</th><th>合格</th><th>需調整</th><th>不採用</th><th>分歧</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="muted">尚無審查紀錄</td></tr>'}</tbody></table>
+    </div>`;
+}
+
 async function renderDash() {
   const RES_URL = (document.querySelector('meta[name="resources-url"]') || {}).content || '';
   RES = { keys: ['questions', 'appdata', 'explanations', 'quality', 'matching'], items: [] };
@@ -427,6 +445,10 @@ async function renderDash() {
   el.subtitle.textContent = `${RES.items.length} 個資源 · 資料完整度總覽`;
   ['fPublisher', 'fEdition', 'fStage', 'fGrade', 'fSubject'].forEach((id) => { document.getElementById(id).onchange = renderResRows; });
   renderResRows();
+  try {
+    const dm = await (await fetch(`${API}/v1/metrics`, { headers: H })).json();
+    renderMetrics(dm);
+  } catch { /* ignore */ }
 }
 
 async function start() {

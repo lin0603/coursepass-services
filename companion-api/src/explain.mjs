@@ -62,3 +62,36 @@ export async function explainQuestion(input = {}) {
   if (id) store.upsertExplanation({ sourceQuestionId: id, model: config.geminiModel, explanation });
   return { model: config.geminiModel, cached: false, explanation };
 }
+
+
+// ---- AI 優化迴路：依老師審查意見改寫題目 ----
+const REWRITE_SYSTEM = [
+  '你是台灣國小數學教材編輯。請依「老師審查意見」改寫題目，維持相同考點與難度，',
+  '讓敘述更清楚、選項更精準（避免模糊或雙解）。',
+  '只輸出 JSON：{"prompt":"...","options":["...","..."],"answer":"...","rationale":"為什麼這樣改（一句話）"}。',
+].join('\n');
+
+export async function rewriteQuestion(input = {}) {
+  if (!config.geminiApiKey) throw new Error('gemini key not configured (set GEMINI_API_KEY)');
+  const notes = Array.isArray(input.notes) ? input.notes.filter(Boolean).join('；') : String(input.notes || '');
+  const user = [
+    `題目：${input.prompt || ''}`,
+    Array.isArray(input.options) && input.options.length ? `選項：${input.options.map((o, i) => `${'ABCDEFGH'[i] || i + 1}. ${o}`).join(' / ')}` : '',
+    input.answer ? `答案：${input.answer}` : '',
+    input.type ? `題型：${input.type}` : '',
+    `老師審查意見：${notes || '（無）'}`,
+  ].filter(Boolean).join('\n');
+  const body = {
+    systemInstruction: { parts: [{ text: REWRITE_SYSTEM }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1200, responseMimeType: 'application/json' },
+  };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
+  let parsed = {};
+  try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { prompt: text, options: [], answer: '', rationale: '' }; }
+  return { model: config.geminiModel, revision: parsed };
+}

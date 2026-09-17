@@ -206,3 +206,16 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .help-body ul, .help-body ol { margin: 4px 0 4px 20px; }
 .help-body code { background: #eef4f1; border-radius: 4px; padding: 1px 5px; }
 .help-tip { margin-top: 14px; padding: 8px 10px; background: #f7fafc; border: 1px dashed #cbd5d1; border-radius: 8px; color: #42606a; }
+
+.app-hint { margin: 4px 0 0; font-size: 13px; color: #8a5a12; background: #fdf7e8; border: 1px dashed #e6cf9a; border-radius: 8px; padding: 6px 10px; }
+
+/* AI 改寫建議 */
+.ai-rev { margin-top: 10px; }
+.rev-list { display: grid; gap: 8px; }
+.rev-item { border: 1px solid #e2ebe7; border-radius: 8px; padding: 8px; background: #fff; }
+.rev-item.approved { border-color: #1c9a63; background: #f2faf6; }
+.rev-item.superseded { opacity: .6; }
+.rev-head { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+.rev-body { font-size: 13px; line-height: 1.6; color: #1f2b2a; }
+.rev-why { font-size: 12px; color: #8a5a12; margin-top: 4px; }
+.rv-approve { margin-top: 6px; }
