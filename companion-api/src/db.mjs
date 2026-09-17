@@ -161,6 +161,9 @@ export const store = {
   aiAdjustQueue(limit = 50) {
     return db.prepare("SELECT sourceQuestionId, reviewerId, aiNote FROM question_reviews WHERE aiStatus='adjust' ORDER BY updatedAt LIMIT ?").all(limit);
   },
+  setExplanationReviewStatus(sourceQuestionId, reviewStatus) {
+    db.prepare('UPDATE explanations SET reviewStatus=? WHERE sourceQuestionId=?').run(reviewStatus || null, sourceQuestionId);
+  },
   clearAiAdjust(sourceQuestionId) {
     db.prepare("UPDATE question_reviews SET aiStatus='', aiNote='' WHERE sourceQuestionId=?").run(sourceQuestionId);
   },

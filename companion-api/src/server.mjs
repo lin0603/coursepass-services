@@ -288,7 +288,9 @@ app.put('/v1/reviews/:id', (req, res) => {
   const parsed = reviewSchema.safeParse(body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
   const reviewerId = parsed.data.reviewerId || '';
-  res.json(store.upsertQuestionReview({ sourceQuestionId: req.params.id, reviewerId, nodeId: parsed.data.nodeId, status: parsed.data.status, note: parsed.data.note, type: parsed.data.type, typeMismatch: parsed.data.typeMismatch, courseId: parsed.data.courseId, aiStatus: parsed.data.aiStatus, aiNote: parsed.data.aiNote }));
+  const saved = store.upsertQuestionReview({ sourceQuestionId: req.params.id, reviewerId, nodeId: parsed.data.nodeId, status: parsed.data.status, note: parsed.data.note, type: parsed.data.type, typeMismatch: parsed.data.typeMismatch, courseId: parsed.data.courseId, aiStatus: parsed.data.aiStatus, aiNote: parsed.data.aiNote });
+  if (parsed.data.aiStatus !== undefined) store.setExplanationReviewStatus(req.params.id, parsed.data.aiStatus === 'adjust' ? 'needs_review' : '');
+  res.json(saved);
 });
 app.delete('/v1/reviews/:id', (req, res) => {
   const reviewerId = req.query.reviewer || '';
