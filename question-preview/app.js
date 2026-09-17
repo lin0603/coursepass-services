@@ -671,6 +671,22 @@ el.list.addEventListener('click', async (event) => {
     } catch (e) { stateEl.textContent = '失敗：' + e.message; }
     return;
   }
+  const figLink = event.target.closest('.fig-block .fig');
+  if (figLink) {
+    event.preventDefault();
+    const ov = document.getElementById('figZoom');
+    if (!ov) return;
+    const col = figLink.closest('.col-left');
+    const r = col.getBoundingClientRect();
+    const top = Math.max(8, r.top);
+    ov.style.left = Math.max(8, r.left) + 'px';
+    ov.style.width = r.width + 'px';
+    ov.style.top = top + 'px';
+    ov.style.height = Math.min(window.innerHeight - top - 16, window.innerHeight * 0.92) + 'px';
+    ov.querySelector('img').src = figLink.getAttribute('href');
+    ov.hidden = false;
+    return;
+  }
   const histBtn = event.target.closest('.rv-history');
   if (histBtn) {
     const section = histBtn.closest('.review');
@@ -982,6 +998,13 @@ el.assignPanel.addEventListener('click', (e) => {
   if (e.target.id === 'asgCreate') runAssign(false);
   if (e.target.id === 'asgExport') exportCsv();
 });
+
+// ---- 題目原圖放大 ----
+const figZoom = document.getElementById('figZoom');
+if (figZoom) {
+  figZoom.addEventListener('click', () => { figZoom.hidden = true; figZoom.querySelector('img').src = ''; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !figZoom.hidden) { figZoom.hidden = true; figZoom.querySelector('img').src = ''; } });
+}
 
 // ---- 使用說明 ----
 const helpBtn = document.getElementById('helpBtn');
