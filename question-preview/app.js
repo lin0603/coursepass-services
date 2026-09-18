@@ -423,7 +423,8 @@ function variantSideHtml(it) {
     </details>`;
   const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
   const review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
-      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
+      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">
+      <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span></div>`;
   return `<section class="variant-side" data-id="${esc(it.id)}">
     <div class="app-head">變化題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span></div>
     ${explain}${review}
@@ -630,7 +631,6 @@ function render() {
         </div>
         <div class="col-ai">
           ${variantSideHtml(it)}
-          ${revisionHtml(it)}
         </div>
       </div>`;
     frag.appendChild(card);
@@ -783,6 +783,27 @@ el.list.addEventListener('click', async (event) => {
       st.textContent = `已產生 v${r.version}`;
       render();
     } catch (e) { st.textContent = '失敗：' + e.message; varGen.disabled = false; }
+    return;
+  }
+  const varSave = event.target.closest('.var-save');
+  if (varSave) {
+    const section = varSave.closest('[data-id]');
+    const id = section.dataset.id;
+    const v = (state.variants[id] || [])[0];
+    if (!v) return;
+    const reason = section.querySelector('.var-reason') ? section.querySelector('.var-reason').value : '';
+    const stEl = section.querySelector('.var-save-state');
+    stEl.textContent = '儲存中…';
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/note`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ version: v.version, reason }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || res.status);
+      state.variants[id] = d.items || [];
+      stEl.textContent = '已儲存';
+    } catch (e) { stEl.textContent = '儲存失敗：' + e.message; }
     return;
   }
   const varOk = event.target.closest('.var-ok');

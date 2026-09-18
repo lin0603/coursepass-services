@@ -266,3 +266,7 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .variant-side { border: 1px solid #d9e3ea; border-radius: 10px; background: #f7fafc; padding: 10px; margin-bottom: 10px; }
 .variant-side .app-head { color: #7c3aed; }
 .variant-side .ai-collapse.var-ai { margin: 6px 0 8px; background: #fff; }
+
+.var-save-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.var-save-row .mini-btn { background: #1e2430; color: #e6e9ef; border: 1px solid #2a3140; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.var-save-row .ai-state { color: #8b93a5; font-size: 12px; }

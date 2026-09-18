@@ -421,6 +421,12 @@ app.post('/v1/variants/:id/reverify', asyncHandler(async (req, res) => {
   const updated = store.updateVariantQuality({ sourceQuestionId: req.params.id, version: row.version, quality });
   res.json({ items: updated });
 }));
+app.post('/v1/variants/:id/note', (req, res) => {
+  const b = req.body || {};
+  const version = Number(b.version);
+  if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
+  res.json({ items: store.updateVariantReason({ sourceQuestionId: req.params.id, version, reason: b.reason }) });
+});
 app.post('/v1/variants/:id/review', (req, res) => {
   const b = req.body || {};
   const version = Number(b.version);
