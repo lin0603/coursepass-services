@@ -238,3 +238,6 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .app-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 1500px) { .app-pair { grid-template-columns: 1fr; } }
 .app-variant .app-phone { border-left: 3px solid #7c3aed; }
+
+.app-fig-svg { margin: 6px 0; padding: 4px; background: #fff; border: 1px solid #e2ebe7; border-radius: 8px; overflow: auto; }
+.app-fig-svg svg { display: block; max-width: 100%; height: auto; }

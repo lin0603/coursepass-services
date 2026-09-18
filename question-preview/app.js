@@ -343,7 +343,8 @@ function variantAppHtml(it) {
     }
     const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${esc(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
     const why = v.rationale ? `<p class="app-hint">變化理由：${esc(v.rationale)}</p>` : '';
-    inner = `<div class="app-prompt">${esc(p.prompt || '')}</div>${body}${qual}${why}`;
+    const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (p.figureNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
+    inner = `<div class="app-prompt">${esc(p.prompt || '')}</div>${fig}${body}${qual}${why}`;
     const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
     review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;

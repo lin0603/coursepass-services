@@ -9,6 +9,7 @@ import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
 import { explainQuestion, generateVariant, regenerateExplanation, rewriteQuestion } from './explain.mjs';
+import { renderFigureSvg } from './figures.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -295,9 +296,12 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
   const parsed = variantSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
   const out = await generateVariant(parsed.data);
-  const reasons = checkVariant(out.variant, parsed.data.prompt);
+  const payload = out.variant || {};
+  if (payload.figure) { const svg = renderFigureSvg(payload.figure); if (svg) payload.figureSvg = svg; }
+  const reasons = checkVariant(payload, parsed.data.prompt);
+  if (parsed.data.hasFigure && !payload.figureSvg) reasons.push('figure_missing');
   const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons };
-  const row = store.addVariant({ sourceQuestionId: req.params.id, nodeId: parsed.data.node, courseId: parsed.data.courseId, payload: out.variant, rationale: out.variant.rationale, model: out.model, quality });
+  const row = store.addVariant({ sourceQuestionId: req.params.id, nodeId: parsed.data.node, courseId: parsed.data.courseId, payload, rationale: payload.rationale, model: out.model, quality });
   res.status(201).json(row);
 }));
 app.post('/v1/variants/:id/review', (req, res) => {
