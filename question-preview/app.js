@@ -817,11 +817,12 @@ el.list.addEventListener('click', async (event) => {
     try {
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/review`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-        body: JSON.stringify({ version: v.version, status: varOk ? 'approved' : 'adjust', reason }),
+        body: JSON.stringify({ version: v.version, status: varOk ? 'approved' : 'adjust', reason: varOk ? reason : '' }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || res.status);
       state.variants[id] = d.items || [];
+      if (!varOk) { const inp = section.querySelector('.var-reason'); if (inp) inp.value = ''; }
       render();
     } catch (e) { alert('儲存失敗：' + e.message); }
     return;
