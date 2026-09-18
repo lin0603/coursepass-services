@@ -278,8 +278,13 @@ function checkVariant(v, originalPrompt) {
   if (v.type === 'choice') {
     if (opts.length < 2) reasons.push('too_few_options');
     if (new Set(opts).size !== opts.length) reasons.push('dup_options');
-    const ans = String(v.answer || '');
-    const ok = opts.includes(ans) || /^[A-Ha-h]$/.test(ans) || /^[1-8]$/.test(ans);
+    const ans = String(v.answer || '').trim();
+    const L = 'ABCDEFGH';
+    const lm = ans.match(/^\(?([A-Ha-h])\)?[.、]?$/);
+    const nm = ans.match(/^\(?([1-8])\)?[.、]?$/);
+    const ok = opts.includes(ans)
+      || (lm && L.indexOf(lm[1].toUpperCase()) >= 0 && L.indexOf(lm[1].toUpperCase()) < opts.length)
+      || (nm && Number(nm[1]) - 1 < opts.length);
     if (!ok) reasons.push('answer_not_in_options');
   }
   if (originalPrompt && v.prompt && String(v.prompt).replace(/\s+/g, '') === String(originalPrompt).replace(/\s+/g, '')) reasons.push('identical_to_source');
