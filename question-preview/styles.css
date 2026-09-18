@@ -8,7 +8,7 @@ body { margin: 0; font-family: -apple-system, "PingFang TC", system-ui, sans-ser
 .filters { display: flex; gap: 10px; flex-wrap: wrap; padding: 12px 22px; background: #12161e; border-bottom: 1px solid #2a3140; position: sticky; top: 63px; z-index: 4; }
 .filters select { background: #1e2430; color: #e6e9ef; border: 1px solid #2a3140; border-radius: 8px; padding: 7px 10px; }
 .chk { display: flex; align-items: center; gap: 6px; color: #b9c0cf; font-size: 13px; }
-.list { max-width: 1100px; margin: 0 auto; padding: 18px 16px 60px; }
+.list { max-width: 1640px; margin: 0 auto; padding: 18px 16px 60px; }
 .card { background: #171b24; border: 1px solid #2a3140; border-left: 4px solid #2fbf6f; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
 .card.warn { border-left-color: #e0a53a; }
 .head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
@@ -40,23 +40,23 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .more button { background: #1e2430; color: #e6e9ef; border: 1px solid #2a3140; border-radius: 8px; padding: 8px 16px; cursor: pointer; }
 
 /* 兩欄：左=原題，右=App 呈現＋審查 */
-.card-cols { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 16px; align-items: start; }
-@media (max-width: 1200px) { .card-cols { grid-template-columns: 1fr 1fr; } .col-ai { grid-column: 1 / -1; } }
-@media (max-width: 900px) { .card-cols { grid-template-columns: 1fr; } .col-ai { grid-column: auto; } }
-.col-right { min-width: 0; display: grid; gap: 10px; }
-.col-ai { min-width: 0; }
+.card-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1400px) { .card-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .col-ai { grid-column: 1 / -1; } }
+@media (max-width: 980px) { .card-cols { grid-template-columns: minmax(0, 1fr); } .col-ai { grid-column: auto; } }
+.col-left, .col-right, .col-ai { min-width: 0; overflow-wrap: anywhere; }
+.col-right { display: grid; gap: 10px; }
 
 /* App 呈現（手機畫面模擬；來自 companion-api 活動格式） */
 .app-view { border: 1px solid #cfe0dd; border-radius: 12px; background: #f5fbfa; padding: 10px 12px; color: #111827; }
 .app-head { font-weight: 800; color: #087e8b; margin-bottom: 6px; }
 .app-label { font-weight: 600; color: #536c72; font-size: 13px; margin-left: 6px; }
 .app-phone { background: #fff; border: 1px solid #dbe5e2; border-radius: 16px; padding: 12px; }
-.app-prompt { font-size: 16px; margin-bottom: 10px; color: #111827; }
+.app-prompt { font-size: 16px; margin-bottom: 10px; color: #111827; overflow-wrap: anywhere; }
 .app-prompt math { font-size: 1.15em; vertical-align: middle; }
 .app-opts { display: grid; gap: 8px; }
 .app-btn { display: flex; gap: 8px; align-items: center; width: 100%; min-height: 46px; padding: 10px 14px; border: 2px solid #bed4d7; border-radius: 14px; background: #fff; color: #111827; font: inherit; font-size: 16px; text-align: left; }
 .app-btn b { flex: none; color: #6b7280; }
-.app-btn span { display: inline-flex; align-items: center; gap: .12em; }
+.app-btn span { display: inline-flex; align-items: center; gap: .12em; flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
 .app-btn { cursor: pointer; }
 .app-btn[disabled] { cursor: default; }
 .app-btn.correct { border-color: #087e8b; background: #e4f3ee; color: #087e8b; font-weight: 700; }
@@ -235,8 +235,8 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .fig-zoom img { max-width: 96vw; max-height: 92vh; width: auto; height: auto; object-fit: contain; background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
 
 /* 原題 / 變化題 並列 */
-.app-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 1500px) { .app-pair { grid-template-columns: 1fr; } }
+.app-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 1800px) { .app-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 .app-variant .app-phone { border-left: 3px solid #7c3aed; }
 
 .app-fig-svg { margin: 6px 0; padding: 4px; background: #fff; border: 1px solid #e2ebe7; border-radius: 8px; overflow: auto; }
@@ -251,3 +251,9 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .ai-collapse .ai-head { display: none; }
 .var-ai { margin-top: 8px; }
 .var-ai .var-explain-out { white-space: normal; }
+
+/* 防溢出重疊 */
+.app-view, .app-phone, .app-opts, .ai, .ai-out { min-width: 0; }
+.app-view { overflow-wrap: anywhere; }
+.app-btn math, .app-prompt math, .ai-out math { max-width: 100%; }
+.col-ai { position: relative; z-index: 1; }
