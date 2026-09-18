@@ -22,6 +22,8 @@ async function post(path, body) {
 
 if (arg === 'assign') {
   await post('/v1/assignments/sync-approved', {});
+} else if (arg === 'gaps') {
+  await post('/v1/variants/fill-gaps', { target: Number(process.env.GAP_TARGET || 5), limit: Number(process.env.GAP_LIMIT || 30), concurrency: 3 });
 } else {
   await post('/v1/variants/batch', { limit: Number(process.env.BATCH_LIMIT || 100), concurrency: 3 });
 }
