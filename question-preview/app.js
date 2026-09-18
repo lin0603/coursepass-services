@@ -408,7 +408,26 @@ function variantAppHtml(it) {
     review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
   }
-  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div>${explain}${review}</section>`;
+  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div></section>`;
+}
+
+// 變化題側欄：AI 解新題 + 變化題審查（放在 AI 改寫建議上方）
+function variantSideHtml(it) {
+  const v = (state.variants[it.id] || [])[0];
+  if (!v) return '';
+  const ekey = variantKey(it.id, v.version);
+  const ex = state.explanations[ekey];
+  const explain = `<details class="ai-collapse var-ai"><summary>AI 解新題 <span class="ai-tag">解說變化題</span></summary>
+      <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
+      <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
+    </details>`;
+  const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
+  const review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
+      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
+  return `<section class="variant-side" data-id="${esc(it.id)}">
+    <div class="app-head">變化題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span></div>
+    ${explain}${review}
+  </section>`;
 }
 
 // App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
@@ -610,6 +629,7 @@ function render() {
           ${reviewHtml(it)}
         </div>
         <div class="col-ai">
+          ${variantSideHtml(it)}
           ${revisionHtml(it)}
         </div>
       </div>`;
@@ -721,7 +741,7 @@ el.list.addEventListener('click', async (event) => {
   }
   const varExplain = event.target.closest('.var-explain');
   if (varExplain) {
-    const section = varExplain.closest('.app-variant');
+    const section = varExplain.closest('[data-id]');
     const id = section.dataset.id;
     const v = (state.variants[id] || [])[0];
     if (!v) return;
@@ -768,7 +788,7 @@ el.list.addEventListener('click', async (event) => {
   const varOk = event.target.closest('.var-ok');
   const varAdjust = event.target.closest('.var-adjust');
   if (varOk || varAdjust) {
-    const section = (varOk || varAdjust).closest('.app-variant');
+    const section = (varOk || varAdjust).closest('[data-id]');
     const id = section.dataset.id;
     const v = (state.variants[id] || [])[0];
     if (!v) return;

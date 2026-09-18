@@ -261,3 +261,8 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 /* 左欄：原題 → App 呈現 → AI 解題 */
 .col-left .app-view { margin-top: 10px; }
 .col-left .ai-collapse.orig-ai { margin-top: 10px; }
+
+/* 側欄：變化題（新題）區塊 */
+.variant-side { border: 1px solid #d9e3ea; border-radius: 10px; background: #f7fafc; padding: 10px; margin-bottom: 10px; }
+.variant-side .app-head { color: #7c3aed; }
+.variant-side .ai-collapse.var-ai { margin: 6px 0 8px; background: #fff; }
