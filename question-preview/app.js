@@ -47,18 +47,38 @@ function correctIndex(a, n) {
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // 變化題數字呈現：與 App（MathML 分數）一致
-function vfrac(whole, num, den) {
-  const head = whole ? `<mn>${whole}</mn>` : '';
-  return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">${head}<mfrac><mrow><mn>${num}</mn></mrow><mrow><mn>${den}</mn></mrow></mfrac></math>`;
+function mathTokens(expr) {
+  const re = /(\d+(?:\.\d+)?)|([×xX÷+\-＝=])/g;
+  let out = ''; let last = 0; let m;
+  while ((m = re.exec(expr))) {
+    out += esc(expr.slice(last, m.index));
+    if (m[1] !== undefined) out += `<mn>${m[1]}</mn>`;
+    else out += `<mo>${esc(m[2] === 'x' || m[2] === 'X' ? '×' : m[2])}</mo>`;
+    last = m.index + m[0].length;
+  }
+  out += esc(expr.slice(last));
+  return out || '<mn></mn>';
 }
+function mfrac(numHtml, denHtml) {
+  return `<mfrac><mrow>${numHtml}</mrow><mrow>${denHtml}</mrow></mfrac>`;
+}
+const MATH_RE = new RegExp(
+  '\\$?\\\\frac\\{([^{}]+)\\}\\{([^{}]+)\\}\\$?' +
+  '|\\(([0-9×xX÷+\\-.\\s]+)\\)\\s*\\/\\s*\\(([0-9×xX÷+\\-.\\s]+)\\)' +
+  '|(\\d+)\\s+(\\d+)\\s*\\/\\s*(\\d+)' +
+  '|(\\d+)\\s*\\/\\s*(\\d+)',
+  'g'
+);
 function vmath(s) {
   const src = String(s ?? '');
-  const re = /(\d+)\s+(\d+)\/(\d+)|(\d+)\/(\d+)/g;
   let out = ''; let last = 0; let m;
-  while ((m = re.exec(src))) {
+  MATH_RE.lastIndex = 0;
+  while ((m = MATH_RE.exec(src))) {
     out += esc(src.slice(last, m.index));
-    if (m[1] !== undefined) out += vfrac(m[1], m[2], m[3]);
-    else out += vfrac(0, m[4], m[5]);
+    if (m[1] !== undefined) out += mfrac(mathTokens(m[1]), mathTokens(m[2]));
+    else if (m[3] !== undefined) out += mfrac(mathTokens(m[3]), mathTokens(m[4]));
+    else if (m[5] !== undefined) out += `<mn>${m[5]}</mn>` + mfrac(`<mn>${m[6]}</mn>`, `<mn>${m[7]}</mn>`);
+    else if (m[8] !== undefined) out += mfrac(`<mn>${m[8]}</mn>`, `<mn>${m[9]}</mn>`);
     last = m.index + m[0].length;
   }
   out += esc(src.slice(last));
@@ -368,8 +388,8 @@ function variantAppHtml(it) {
       if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${vmath(String(p.answer || ''))}）`}</p>`;
       if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     }
-    const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${esc(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
-    const why = v.rationale ? `<p class="app-hint">變化理由：${esc(v.rationale)}</p>` : '';
+    const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${vmath(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
+    const why = v.rationale ? `<p class="app-hint">變化理由：${vmath(v.rationale)}</p>` : '';
     const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (p.figureNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
     inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}${why}`;
     const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
