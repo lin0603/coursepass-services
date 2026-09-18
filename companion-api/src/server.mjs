@@ -380,6 +380,33 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
   const row = store.addVariant({ sourceQuestionId: req.params.id, nodeId: parsed.data.node, courseId: parsed.data.courseId, payload, rationale: payload.rationale, model: out.model, quality });
   res.status(201).json(row);
 }));
+app.post('/v1/variants/:id/reverify', asyncHandler(async (req, res) => {
+  const items = store.listVariants({ sourceQuestionId: req.params.id });
+  if (!items.length) return res.status(404).json({ error: 'no variant' });
+  const row = items[0];
+  const payload = row.payload || {};
+  const reasons = [];
+  if (!payload.prompt) reasons.push('no_prompt');
+  if (!payload.answer) reasons.push('no_answer');
+  let verify = null;
+  if (payload.prompt) {
+    try {
+      const vr = await verifyVariant({ prompt: payload.prompt, options: payload.options, type: payload.type });
+      const opts2 = payload.options || [];
+      const idxs = [...new Set((vr.allCorrect || []).map((x) => answerIndex(x, opts2)).filter((i) => i >= 0))];
+      verify = { answer: vr.answer, allCorrect: vr.allCorrect, matchedCount: idxs.length, reason: vr.reason, model: vr.model };
+      if (!sameAnswer(payload.answer, vr.answer, opts2)) reasons.push('self_verify_mismatch');
+      const multiQ = /複選|多選|所有|哪些|全部寫出|哪些人|哪幾個/.test(String(payload.prompt || ''));
+      const allAbove = opts2.some((o) => /以上皆是|以上都|皆正確|全部都|都正確|以上都對/.test(String(o)));
+      if (!multiQ && !allAbove && idxs.length > 1) reasons.push('self_verify_multiple');
+    } catch (e) { console.error('reverify failed', req.params.id, e.message); return res.status(502).json({ error: e.message }); }
+  }
+  const rules = checkVariant(payload, null).filter((r) => r !== 'identical_to_source');
+  const all = [...new Set([...rules, ...reasons])];
+  const quality = { status: all.length ? 'needs_review' : 'ok', reasons: all, verify };
+  const updated = store.updateVariantQuality({ sourceQuestionId: req.params.id, version: row.version, quality });
+  res.json({ items: updated });
+}));
 app.post('/v1/variants/:id/review', (req, res) => {
   const b = req.body || {};
   const version = Number(b.version);

@@ -331,6 +331,10 @@ export const store = {
                        FROM variants ${where} ORDER BY sourceQuestionId, version DESC`)
       .all(...params).map((r) => ({ ...r, payload: JSON.parse(r.payload || '{}'), quality: JSON.parse(r.quality || '{}') }));
   },
+  updateVariantQuality({ sourceQuestionId, version, quality }) {
+    db.prepare('UPDATE variants SET quality=? WHERE sourceQuestionId=? AND version=?').run(JSON.stringify(quality || {}), sourceQuestionId, version);
+    return this.listVariants({ sourceQuestionId });
+  },
   reviewVariant({ sourceQuestionId, version, status, reason }) {
     db.prepare('UPDATE variants SET status=?, reason=? WHERE sourceQuestionId=? AND version=?').run(status, reason || '', sourceQuestionId, version);
     if (status === 'approved') db.prepare("UPDATE variants SET status='superseded' WHERE sourceQuestionId=? AND version<>?").run(sourceQuestionId, version);
