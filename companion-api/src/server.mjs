@@ -329,11 +329,24 @@ function checkVariant(v, originalPrompt) {
   if (originalPrompt && v.prompt && String(v.prompt).replace(/\s+/g, '') === String(originalPrompt).replace(/\s+/g, '')) reasons.push('identical_to_source');
   return [...new Set(reasons)];
 }
+function answerCandidates(ans, opts) {
+  const a = String(ans || '').trim();
+  const set = new Set();
+  const i0 = answerIndex(a, opts);
+  if (i0 >= 0) set.add(i0);
+  const d = a.match(/^\(?([1-8])\)?[.、]?$/);
+  if (d) {
+    const n = Number(d[1]);
+    if (n - 1 < opts.length) set.add(n - 1);
+    if (n < opts.length) set.add(n);
+  }
+  return [...set];
+}
 function sameAnswer(a, b, opts) {
   if (!a || !b) return false;
-  const ia = answerIndex(a, opts);
-  const ib = answerIndex(b, opts);
-  if (ia >= 0 && ib >= 0) return ia === ib;
+  const ca = answerCandidates(a, opts);
+  const cb = answerCandidates(b, opts);
+  if (ca.length && cb.length && ca.some((i) => cb.includes(i))) return true;
   const norm = (z) => String(z || '').replace(/\s+/g, '').replace(/[（(][1-8A-Ha-h][）)]/g, '').replace(/[.。、,，]$/, '');
   if (norm(a) === norm(b)) return true;
   const va = numVal(a); const vb = numVal(b);
