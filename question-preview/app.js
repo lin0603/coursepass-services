@@ -602,13 +602,11 @@ function render() {
             <div class="fig-cap">題目原圖</div>
             ${it.imageUrl ? `<a class="fig" href="${it.imageUrl}" target="_blank"><img loading="lazy" src="${it.imageUrl}" alt="題目原圖"></a>` : '<div class="noimg">無圖</div>'}
           </div>
+          ${appViewHtml(it)}
           <details class="ai-collapse orig-ai"><summary>用 Gemini AI 解題 <span class="ai-tag">原題・需淺顯易懂</span></summary>${aiHtml(it)}</details>
         </div>
         <div class="col-right">
-          <div class="app-pair">
-            ${appViewHtml(it)}
-            ${variantAppHtml(it)}
-          </div>
+          ${variantAppHtml(it)}
           ${reviewHtml(it)}
         </div>
         <div class="col-ai">
