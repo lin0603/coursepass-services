@@ -354,8 +354,12 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
   if (payload.prompt && !reasons.length) {
     try {
       const vr = await verifyVariant({ prompt: payload.prompt, options: payload.options, type: payload.type });
-      verify = { answer: vr.answer, reason: vr.reason, model: vr.model };
-      if (!sameAnswer(payload.answer, vr.answer, payload.options || [])) reasons.push('self_verify_mismatch');
+      const opts2 = payload.options || [];
+      const idxs = [...new Set((vr.allCorrect || []).map((x) => answerIndex(x, opts2)).filter((i) => i >= 0))];
+      verify = { answer: vr.answer, allCorrect: vr.allCorrect, matchedCount: idxs.length, reason: vr.reason, model: vr.model };
+      if (!sameAnswer(payload.answer, vr.answer, opts2)) reasons.push('self_verify_mismatch');
+      const multiQ = /複選|多選|所有|哪些|全部寫出|哪些人|哪幾個/.test(String(payload.prompt || ''));
+      if (!multiQ && idxs.length > 1) reasons.push('self_verify_multiple');
     } catch (e) { console.error('verify failed', req.params.id, e.message); }
   }
   const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons, verify };

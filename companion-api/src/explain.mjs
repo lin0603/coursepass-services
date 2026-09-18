@@ -120,7 +120,8 @@ export async function regenerateExplanation(input = {}) {
 const VERIFY_SYSTEM = [
   '你是台灣國小數學老師。請「獨立」解出下面這道題，不要假設或沿用任何提示的答案。',
   '若為選擇題，answer 請直接給出你認為正確的那個選項的完整文字（不要只給 A/B/C/D，除非選項本身就是字母）。',
-  '只輸出 JSON：{"answer":"...","reason":"一句話說明"}。',
+  '另外請把「所有實際符合題目條件」的選項全部放進 all_correct（可能不只一個，例如題目問「介於 A 與 B 之間」，就要逐一檢查每個選項）。',
+  '只輸出 JSON：{"answer":"...","all_correct":["選項1","選項2"],"reason":"一句話說明"}。',
 ].join('\n');
 
 export async function verifyVariant(input = {}) {
@@ -142,7 +143,8 @@ export async function verifyVariant(input = {}) {
   const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
   let parsed = {};
   try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { answer: text }; }
-  return { model: config.geminiModel, answer: String(parsed.answer || '').trim(), reason: String(parsed.reason || '').trim() };
+  const all = Array.isArray(parsed.all_correct) ? parsed.all_correct.map((x) => String(x).trim()).filter(Boolean) : [];
+  return { model: config.geminiModel, answer: String(parsed.answer || '').trim(), allCorrect: all, reason: String(parsed.reason || '').trim() };
 }
 
 // ---- 變化題產生（同考點、不同樣貌；保留原題）----
