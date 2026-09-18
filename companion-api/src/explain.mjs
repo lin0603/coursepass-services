@@ -214,14 +214,14 @@ export async function generateVariant(input = {}) {
   const body = {
     systemInstruction: { parts: [{ text: VARIANT_SYSTEM }] },
     contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { temperature: 0.6, maxOutputTokens: 1200, responseMimeType: 'application/json' },
+    generationConfig: { temperature: 0.6, maxOutputTokens: 8000, responseMimeType: 'application/json' },
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
   if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
   const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
   let parsed = {};
-  try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { prompt: text, options: [], answer: '', type: 'fill_blank', rationale: '' }; }
+  try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); try { parsed = m ? JSON.parse(m[0]) : { prompt: text, options: [], answer: '', type: 'fill_blank', rationale: '' }; } catch { parsed = { prompt: text, options: [], answer: '', type: 'fill_blank', rationale: '' }; } }
   return { model: config.geminiModel, variant: parsed };
 }
