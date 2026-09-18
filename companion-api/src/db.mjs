@@ -342,6 +342,10 @@ export const store = {
                        FROM variants ${where} ORDER BY sourceQuestionId, version DESC`)
       .all(...params).map((r) => ({ ...r, payload: JSON.parse(r.payload || '{}'), quality: JSON.parse(r.quality || '{}') }));
   },
+  deleteVariants(sourceQuestionId) {
+    const info = db.prepare('DELETE FROM variants WHERE sourceQuestionId=?').run(sourceQuestionId);
+    return info.changes;
+  },
   updateVariantReason({ sourceQuestionId, version, reason }) {
     db.prepare('UPDATE variants SET reason=? WHERE sourceQuestionId=? AND version=?').run(reason || '', sourceQuestionId, version);
     return this.listVariants({ sourceQuestionId });

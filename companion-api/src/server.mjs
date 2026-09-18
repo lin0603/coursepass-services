@@ -391,13 +391,6 @@ async function generateVariantRow(id, input) {
   const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons, verify };
   return store.addVariant({ sourceQuestionId: id, nodeId: input.node, courseId: input.courseId, payload, rationale: payload.rationale, model: out.model, quality });
 }
-app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
-  const parsed = variantSchema.safeParse(req.body || {});
-  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
-  const row = await generateVariantRow(req.params.id, parsed.data);
-  res.status(201).json(row);
-}));
-
 // 每日批次：優先重生成「需調整」，再補「尚未產生」的題
 const batchSchema = z.object({
   limit: z.number().int().min(1).max(300).optional(),
@@ -447,6 +440,16 @@ app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
   const workers = Array.from({ length: b.concurrency || 3 }, async () => { while (queue.length) { const id = queue.shift(); await run(id); } });
   await Promise.all(workers);
   res.json({ processed: picks.length, queuedAdjust: adjust.length, queuedNew: fresh.length, ok, needs_review: nr, failed, ids: picks });
+}));
+
+app.delete('/v1/variants/:id', (req, res) => {
+  res.json({ deleted: store.deleteVariants(req.params.id) });
+});
+app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
+  const parsed = variantSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  const row = await generateVariantRow(req.params.id, parsed.data);
+  res.status(201).json(row);
 }));
 
 // 將「已合格」但尚未指派（或不足雙審）的題，自動追加指派（維持雙審、不重複）
