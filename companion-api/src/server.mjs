@@ -369,14 +369,12 @@ function sameAnswer(a, b, opts) {
   return va !== null && vb !== null && Math.abs(va - vb) < 1e-9;
 }
 app.get('/v1/variants', (req, res) => res.json({ items: store.listVariants({ sourceQuestionId: req.query.question }) }));
-app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
-  const parsed = variantSchema.safeParse(req.body || {});
-  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
-  const out = await generateVariant(parsed.data);
+async function generateVariantRow(id, input) {
+  const out = await generateVariant(input);
   const payload = out.variant || {};
   if (payload.figure) { const svg = renderFigureSvg(payload.figure); if (svg) payload.figureSvg = svg; }
-  const reasons = checkVariant(payload, parsed.data.prompt);
-  if (parsed.data.hasFigure && !payload.figureSvg) reasons.push('figure_missing');
+  const reasons = checkVariant(payload, input.prompt);
+  if (input.hasFigure && !payload.figureSvg) reasons.push('figure_missing');
   let verify = null;
   if (payload.prompt && !reasons.length) {
     try {
@@ -388,12 +386,94 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
       const multiQ = /複選|多選|所有|哪些|全部寫出|哪些人|哪幾個/.test(String(payload.prompt || ''));
       const allAbove = opts2.some((o) => /以上皆是|以上都|皆正確|全部都|都正確|以上都對/.test(String(o)));
       if (!multiQ && !allAbove && idxs.length > 1) reasons.push('self_verify_multiple');
-    } catch (e) { console.error('verify failed', req.params.id, e.message); }
+    } catch (e) { console.error('verify failed', id, e.message); }
   }
   const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons, verify };
-  const row = store.addVariant({ sourceQuestionId: req.params.id, nodeId: parsed.data.node, courseId: parsed.data.courseId, payload, rationale: payload.rationale, model: out.model, quality });
+  return store.addVariant({ sourceQuestionId: id, nodeId: input.node, courseId: input.courseId, payload, rationale: payload.rationale, model: out.model, quality });
+}
+app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
+  const parsed = variantSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  const row = await generateVariantRow(req.params.id, parsed.data);
   res.status(201).json(row);
 }));
+
+// 每日批次：優先重生成「需調整」，再補「尚未產生」的題
+const batchSchema = z.object({
+  limit: z.number().int().min(1).max(300).optional(),
+  courseId: z.string().max(64).optional(),
+  concurrency: z.number().int().min(1).max(6).optional(),
+});
+app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
+  const b = batchSchema.safeParse(req.body || {}).data || {};
+  const limit = b.limit || config.batchLimit;
+  const courseId = b.courseId || config.batchCourseId;
+  const [src, appd] = await Promise.all([
+    fetch(config.explainDataUrl).then((r) => r.json()).catch(() => ({ items: [] })),
+    fetch(config.appDataUrl).then((r) => r.json()).catch(() => ({ items: {} })),
+  ]);
+  const items = src.items || []; const app = appd.items || {};
+  const byId = new Map(items.map((q) => [q.id, q]));
+  const latest = {};
+  for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+  const adjust = []; const fresh = [];
+  for (const q of items) {
+    if (!q || !q.id || q.hasFigure) continue;
+    const a = app[q.id] || {};
+    let type = a.type || q.type;
+    if (type === 'multiple_choice') type = 'choice';
+    if (type !== 'choice' && type !== 'fill_blank') continue;
+    const l = latest[q.id];
+    if (l && l.status === 'approved') continue;
+    if (l && l.status === 'adjust') adjust.push(q.id);
+    else if (!l) fresh.push(q.id);
+  }
+  const picks = [...adjust, ...fresh].slice(0, limit);
+  let ok = 0; let nr = 0; let failed = 0;
+  const queue = [...picks];
+  const run = async (id) => {
+    const q = byId.get(id); if (!q) return;
+    const a = app[id] || {};
+    let type = a.type || q.type;
+    if (type === 'multiple_choice') type = 'choice';
+    try {
+      const row = await generateVariantRow(id, {
+        prompt: q.prompt || '', options: (q.options || []).map((o) => (typeof o === 'object' ? o.content : o)),
+        answer: String(q.answer || ''), type, node: q.node, nodeName: q.nodeName, difficulty: q.difficulty, hasFigure: false, courseId,
+      });
+      if ((row.quality || {}).status === 'ok') ok += 1; else nr += 1;
+    } catch (e) { failed += 1; console.error('batch failed', id, e.message); }
+  };
+  const workers = Array.from({ length: b.concurrency || 3 }, async () => { while (queue.length) { const id = queue.shift(); await run(id); } });
+  await Promise.all(workers);
+  res.json({ processed: picks.length, queuedAdjust: adjust.length, queuedNew: fresh.length, ok, needs_review: nr, failed, ids: picks });
+}));
+
+// 將「已合格」但尚未指派（或不足雙審）的題，自動追加指派（維持雙審、不重複）
+app.post('/v1/assignments/sync-approved', (req, res) => {
+  const b = req.body || {};
+  const reviewers = Array.isArray(b.reviewers) && b.reviewers.length ? b.reviewers.map(String) : ['r_mu5a8ddkq90b', 'r_mu5a8dveklbj', 'r_mu59gcnb1agn'];
+  const courseId = b.courseId || config.batchCourseId;
+  const latest = {};
+  for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+  const approved = Object.entries(latest).filter(([, v]) => v.status === 'approved').map(([id]) => id).sort();
+  const have = new Map();
+  for (const a of store.listAssignments({})) {
+    if (!have.has(a.sourceQuestionId)) have.set(a.sourceQuestionId, new Set());
+    have.get(a.sourceQuestionId).add(a.reviewerId);
+  }
+  const pairs = [[0, 1], [1, 2], [2, 0]];
+  const rows = []; let i = 0; let added = 0;
+  for (const id of approved) {
+    const set = have.get(id) || new Set();
+    if (set.size >= 2) continue;
+    const pair = pairs[i % pairs.length]; i += 1;
+    for (const k of pair) { const rid = reviewers[k]; if (rid && !set.has(rid)) { rows.push({ sourceQuestionId: id, reviewerId: rid, courseId }); added += 1; } }
+  }
+  const batchId = `b_${Date.now().toString(36)}`;
+  const created = rows.length ? store.createAssignments(rows, batchId) : 0;
+  res.json({ approved: approved.length, added: created });
+});
 app.post('/v1/variants/:id/reverify', asyncHandler(async (req, res) => {
   const items = store.listVariants({ sourceQuestionId: req.params.id });
   if (!items.length) return res.status(404).json({ error: 'no variant' });
