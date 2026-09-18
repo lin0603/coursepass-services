@@ -512,19 +512,19 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     const k = `${l}\u0000${d}`;
     const have = counts.get(k) || 0; const need = target - have;
     if (need <= 0) continue;
-    let pool = (exact.get(k) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k));
+    let pool = (exact.get(k) || []).filter((x) => !contrib.has(x.id));
     let same = true;
     if (pool.length < need) {
       same = false;
       const seenIds = new Set(pool.map((x) => x.id));
-      const extraL = (byLesson.get(l) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k) && !seenIds.has(x.id));
+      const extraL = (byLesson.get(l) || []).filter((x) => !contrib.has(x.id) && !seenIds.has(x.id));
       extraL.forEach((x) => seenIds.add(x.id));
       pool = pool.concat(extraL);
       if (pool.length < need) {
         const node = (exact.get(k) || [])[0] ? (exact.get(k) || [])[0].node : null;
         const nodeQ = node || (items.find((x) => x.chapter === l) || {}).node;
         if (nodeQ) {
-          const extraN = (byNode.get(nodeQ) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k) && !seenIds.has(x.id));
+          const extraN = (byNode.get(nodeQ) || []).filter((x) => !contrib.has(x.id) && !seenIds.has(x.id));
           pool = pool.concat(extraN);
         }
       }
