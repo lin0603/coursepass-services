@@ -215,6 +215,17 @@ export const store = {
   assignedQuestionIds() {
     return db.prepare('SELECT DISTINCT sourceQuestionId FROM assignments').all().map((r) => r.sourceQuestionId);
   },
+  pruneAssignments({ keep = [], reviewers = [] } = {}) {
+    const hasKeep = Array.isArray(keep) && keep.length > 0;
+    const hasRev = Array.isArray(reviewers) && reviewers.length > 0;
+    const where = [];
+    const params = [];
+    if (hasKeep) { where.push(`sourceQuestionId NOT IN (${keep.map(() => '?').join(',')})`); params.push(...keep); }
+    if (hasRev) { where.push(`reviewerId IN (${reviewers.map(() => '?').join(',')})`); params.push(...reviewers); }
+    if (!where.length) return 0;
+    const info = db.prepare(`DELETE FROM assignments WHERE ${where.join(' AND ')}`).run(...params);
+    return info.changes;
+  },
   markAssignmentDone(sourceQuestionId, reviewerId) {
     db.prepare("UPDATE assignments SET status='done', doneAt=? WHERE sourceQuestionId=? AND reviewerId=?").run(now(), sourceQuestionId, reviewerId);
   },

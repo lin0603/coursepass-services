@@ -518,6 +518,14 @@ app.post('/v1/assignments', (req, res) => {
   res.status(201).json({ batchId, questions, assignments: created });
 });
 app.get('/v1/assignments', (req, res) => res.json({ items: store.listAssignments({ reviewerId: req.query.reviewer, status: req.query.status }) }));
+app.post('/v1/assignments/prune', (req, res) => {
+  const b = req.body || {};
+  const keep = Array.isArray(b.keep) ? b.keep.map(String) : [];
+  const reviewers = Array.isArray(b.reviewers) ? b.reviewers.map(String) : [];
+  if (!keep.length && !reviewers.length) return res.status(400).json({ error: 'keep or reviewers required' });
+  const removed = store.pruneAssignments({ keep, reviewers });
+  res.json({ removed, remaining: store.listAssignments({}).length });
+});
 app.post('/v1/assignments/reassign', (req, res) => {
   const body = req.body || {};
   if (!body.from || !body.to) return res.status(400).json({ error: 'from/to required' });
