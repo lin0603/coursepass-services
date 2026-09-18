@@ -270,3 +270,16 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .var-save-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .var-save-row .mini-btn { background: #1e2430; color: #e6e9ef; border: 1px solid #2a3140; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .var-save-row .ai-state { color: #8b93a5; font-size: 12px; }
+
+/* 「AI 解新題」要顯眼 */
+.variant-side .ai-collapse.var-ai { border-color: #7c3aed33; }
+.variant-side .ai-collapse.var-ai > summary {
+  background: #7c3aed; color: #fff; padding: 11px 14px; border-radius: 10px;
+  font-size: 15px; font-weight: 800; gap: 8px;
+}
+.variant-side .ai-collapse.var-ai > summary::before { content: "▶"; font-size: 11px; opacity: .95; }
+.variant-side .ai-collapse.var-ai[open] > summary { border-radius: 10px 10px 0 0; }
+.variant-side .ai-collapse.var-ai[open] > summary::before { content: "▼"; }
+.variant-side .ai-collapse.var-ai > summary .ai-tag { background: rgba(255,255,255,.22); color: #fff; border-radius: 999px; padding: 2px 8px; }
+.variant-side .ai-collapse.var-ai > .ai-actions,
+.variant-side .ai-collapse.var-ai > .ai-out { padding: 8px 14px 10px; }
