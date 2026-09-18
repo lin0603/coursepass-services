@@ -124,6 +124,18 @@ const VERIFY_SYSTEM = [
   '只輸出 JSON：{"answer":"...","all_correct":["選項1","選項2"],"reason":"一句話說明"}。',
 ].join('\n');
 
+function parseLoose(text) {
+  let t = String(text || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  try { return JSON.parse(t); } catch {}
+  const am = t.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const cm = t.match(/"all_correct"\s*:\s*\[([\s\S]*?)\]/);
+  const out = {};
+  if (am) out.answer = am[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+  if (cm) out.all_correct = (cm[1].match(/"((?:[^"\\]|\\.)*)"/g) || []).map((z) => z.slice(1, -1).replace(/\\"/g, '"'));
+  if (am || cm) return out;
+  return { answer: t };
+}
+
 export async function verifyVariant(input = {}) {
   if (!config.geminiApiKey) throw new Error('gemini key not configured (set GEMINI_API_KEY)');
   const lines = [`題目：${input.prompt || ''}`];
@@ -140,21 +152,23 @@ export async function verifyVariant(input = {}) {
   let model = config.geminiModel;
   if (config.verifyProvider === 'openai' && config.verifyApiKey) {
     model = config.verifyModel;
-    const res = await fetch(`${config.verifyBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.verifyApiKey}` },
-      body: JSON.stringify({
-        model: config.verifyModel,
-        messages: [{ role: 'system', content: VERIFY_SYSTEM }, { role: 'user', content: lines.join('\n') }],
-        temperature: 0,
-        response_format: { type: 'json_object' },
-        max_tokens: 800,
-      }),
-      signal: AbortSignal.timeout(90000),
-    });
-    if (!res.ok) throw new Error(`verify ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = await res.json();
-    text = String(data.choices?.[0]?.message?.content || '').trim();
+    for (let attempt = 0; attempt < 2 && !text; attempt += 1) {
+      const res = await fetch(`${config.verifyBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.verifyApiKey}` },
+        body: JSON.stringify({
+          model: config.verifyModel,
+          messages: [{ role: 'system', content: VERIFY_SYSTEM }, { role: 'user', content: lines.join('\n') }],
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          max_tokens: 1500,
+        }),
+        signal: AbortSignal.timeout(90000),
+      });
+      if (!res.ok) throw new Error(`verify ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const data = await res.json();
+      text = String(data.choices?.[0]?.message?.content || '').trim();
+    }
   } else {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
@@ -162,8 +176,7 @@ export async function verifyVariant(input = {}) {
     const data = await res.json();
     text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
   }
-  let parsed = {};
-  try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { answer: text }; }
+  const parsed = parseLoose(text);
   const all = Array.isArray(parsed.all_correct) ? parsed.all_correct.map((x) => String(x).trim()).filter(Boolean) : [];
   return { model, answer: String(parsed.answer || '').trim(), allCorrect: all, reason: String(parsed.reason || '').trim() };
 }

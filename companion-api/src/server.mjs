@@ -342,12 +342,14 @@ function answerCandidates(ans, opts) {
   }
   return [...set];
 }
+const S2T = { 数: '數', 个: '個', 门: '門', 万: '萬', 与: '與', 为: '為', 众: '眾', 题: '題', 选: '選', 时: '時', 间: '間', 长: '長', 车: '車', 东: '東', 马: '馬', 鸟: '鳥', 龙: '龍', 龟: '龜', 书: '書', 写: '寫', 边: '邊', 发: '發', 会: '會', 点: '點', 线: '線', 张: '張', 颗: '顆', 这: '這', 过: '過', 还: '還', 应: '應', 规: '規', 则: '則', 关: '關', 计: '計', 观: '觀', 圆: '圓', 体: '體', 积: '積', 种: '種', 对: '對', 错: '錯', 义: '義', 复: '複', 简: '簡', 单: '單', 双: '雙', 边: '邊', 无: '無', 开: '開', 买: '買', 卖: '賣', 结: '結', 构: '構', 图: '圖', 么: '麼' };
+function t2t(z) { return String(z || '').replace(/[\u4e00-\u9fff]/g, (c) => S2T[c] || c); }
 function sameAnswer(a, b, opts) {
   if (!a || !b) return false;
   const ca = answerCandidates(a, opts);
   const cb = answerCandidates(b, opts);
   if (ca.length && cb.length && ca.some((i) => cb.includes(i))) return true;
-  const norm = (z) => String(z || '').replace(/\s+/g, '').replace(/[（(][1-8A-Ha-h][）)]/g, '').replace(/[.。、,，]$/, '');
+  const norm = (z) => t2t(z).replace(/\s+/g, '').replace(/[（(][1-8A-Ha-h][）)]/g, '').replace(/[.。、,，;；:：]/g, '');
   if (norm(a) === norm(b)) return true;
   const va = numVal(a); const vb = numVal(b);
   return va !== null && vb !== null && Math.abs(va - vb) < 1e-9;
