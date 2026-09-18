@@ -518,6 +518,20 @@ app.post('/v1/assignments', (req, res) => {
   res.status(201).json({ batchId, questions, assignments: created });
 });
 app.get('/v1/assignments', (req, res) => res.json({ items: store.listAssignments({ reviewerId: req.query.reviewer, status: req.query.status }) }));
+const assignAddSchema = z.object({
+  reviewerId: z.string().min(1),
+  ids: z.array(z.string().min(1)).min(1),
+  courseId: z.string().max(64).optional(),
+});
+app.post('/v1/assignments/add', (req, res) => {
+  const parsed = assignAddSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  const { reviewerId, ids, courseId } = parsed.data;
+  const rows = ids.map((sourceQuestionId) => ({ sourceQuestionId, reviewerId, courseId }));
+  const batchId = `b_${Date.now().toString(36)}`;
+  const created = store.createAssignments(rows, batchId);
+  res.status(201).json({ batchId, questions: ids.length, assignments: created });
+});
 app.post('/v1/assignments/prune', (req, res) => {
   const b = req.body || {};
   const keep = Array.isArray(b.keep) ? b.keep.map(String) : [];
