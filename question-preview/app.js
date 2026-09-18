@@ -62,6 +62,9 @@ function mathTokens(expr) {
 function mfrac(numHtml, denHtml) {
   return `<mfrac><mrow>${numHtml}</mrow><mrow>${denHtml}</mrow></mfrac>`;
 }
+function mwrap(inner) {
+  return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">${inner}</math>`;
+}
 const MATH_RE = new RegExp(
   '\\$?\\\\frac\\{([^{}]+)\\}\\{([^{}]+)\\}\\$?' +
   '|\\(([0-9×xX÷+\\-.\\s]+)\\)\\s*\\/\\s*\\(([0-9×xX÷+\\-.\\s]+)\\)' +
@@ -75,10 +78,10 @@ function vmath(s) {
   MATH_RE.lastIndex = 0;
   while ((m = MATH_RE.exec(src))) {
     out += esc(src.slice(last, m.index));
-    if (m[1] !== undefined) out += mfrac(mathTokens(m[1]), mathTokens(m[2]));
-    else if (m[3] !== undefined) out += mfrac(mathTokens(m[3]), mathTokens(m[4]));
-    else if (m[5] !== undefined) out += `<mn>${m[5]}</mn>` + mfrac(`<mn>${m[6]}</mn>`, `<mn>${m[7]}</mn>`);
-    else if (m[8] !== undefined) out += mfrac(`<mn>${m[8]}</mn>`, `<mn>${m[9]}</mn>`);
+    if (m[1] !== undefined) out += mwrap(mfrac(mathTokens(m[1]), mathTokens(m[2])));
+    else if (m[3] !== undefined) out += mwrap(mfrac(mathTokens(m[3]), mathTokens(m[4])));
+    else if (m[5] !== undefined) out += mwrap(`<mn>${m[5]}</mn>` + mfrac(`<mn>${m[6]}</mn>`, `<mn>${m[7]}</mn>`));
+    else if (m[8] !== undefined) out += mwrap(mfrac(`<mn>${m[8]}</mn>`, `<mn>${m[9]}</mn>`));
     last = m.index + m[0].length;
   }
   out += esc(src.slice(last));
