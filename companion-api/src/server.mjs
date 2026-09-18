@@ -455,6 +455,89 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
   res.status(201).json(row);
 }));
 
+// ---- 覆蓋率（依課程自動計算；小節 × 難度）----
+const courseCache = new Map(); // url -> { at, data }
+async function loadQuestions(url) {
+  const hit = courseCache.get(url);
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.data;
+  const data = await fetch(url).then((r) => r.json()).catch(() => ({ items: [] }));
+  courseCache.set(url, { at: Date.now(), data });
+  return data;
+}
+let coursesCache = { at: 0, data: null };
+async function loadCourses() {
+  if (coursesCache.data && Date.now() - coursesCache.at < 5 * 60 * 1000) return coursesCache.data;
+  const data = await fetch(config.coursesUrl).then((r) => r.json()).catch(() => ({ courses: [] }));
+  coursesCache = { at: Date.now(), data };
+  return data;
+}
+const PLAYABLE = new Set(['multiple_choice', 'choice', 'fill_blank', 'true_false', 'matching']);
+const coverageSchema = z.object({
+  course: z.string().max(64).optional(),
+  cell: z.enum(['lesson_difficulty', 'lesson_difficulty_type']).optional(),
+  scope: z.enum(['playable_nofigure', 'playable', 'all']).optional(),
+  target: z.coerce.number().int().min(1).max(20).optional(),
+});
+app.get('/v1/coverage', asyncHandler(async (req, res) => {
+  const q = coverageSchema.parse(req.query || {});
+  const target = q.target || 5;
+  const cell = q.cell || 'lesson_difficulty';
+  const scope = q.scope || 'playable_nofigure';
+  const courses = (await loadCourses()).courses || [];
+  const found = courses.find((c) => c.courseId === q.course) || null;
+  const url = (found && found.data && found.data.questions) || config.explainDataUrl;
+  const items = (await loadQuestions(url)).items || [];
+  const allow = (x) => {
+    if (scope === 'all') return true;
+    const p = PLAYABLE.has(x.type);
+    if (!p) return false;
+    if (scope === 'playable') return true;
+    return !x.hasFigure;
+  };
+  const lessons = [...new Set(items.map((x) => x.chapter).filter(Boolean))].sort();
+  const diffs = [...new Set(items.map((x) => x.difficulty).filter(Boolean))].sort();
+  const types = [...new Set(items.filter(allow).map((x) => x.type))].sort();
+  const cellsOf = (x) => (cell === 'lesson_difficulty_type'
+    ? [x.chapter, x.difficulty, x.type] : [x.chapter, x.difficulty]);
+  const counts = new Map();
+  for (const x of items) {
+    if (!x.chapter || !x.difficulty || !allow(x)) continue;
+    const k = cellsOf(x).join('\u0000');
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const allCells = [];
+  for (const l of lessons) {
+    for (const d of diffs) {
+      if (cell === 'lesson_difficulty_type') { for (const t of types) allCells.push([l, d, t]); }
+      else allCells.push([l, d]);
+    }
+  }
+  let cellsMet = 0; let questionsNeeded = 0;
+  const byLesson = new Map(); const byDifficulty = new Map();
+  for (const c of allCells) {
+    const have = counts.get(c.join('\u0000')) || 0;
+    const met = have >= target;
+    if (met) cellsMet += 1; else questionsNeeded += target - have;
+    const bump = (map, key) => { const cur = map.get(key) || { key, met: 0, total: 0, gap: 0 }; cur.total += 1; if (met) cur.met += 1; else cur.gap += target - have; map.set(key, cur); };
+    bump(byLesson, c[0]);
+    bump(byDifficulty, c[1]);
+  }
+  res.json({
+    courseId: (found && found.courseId) || q.course || null,
+    courseName: (found && found.name) || '',
+    publisher: (found && found.publisher) || '',
+    cell, scope, target,
+    cellsTotal: allCells.length,
+    cellsMet,
+    questionsNeeded,
+    targetTotal: target * allCells.length,
+    playableCount: items.filter(allow).length,
+    totalCount: items.length,
+    byDifficulty: [...byDifficulty.values()].sort((a, b) => a.key.localeCompare(b.key)),
+    byLesson: [...byLesson.values()].sort((a, b) => b.gap - a.gap),
+  });
+}));
+
 // 將「已合格」但尚未指派（或不足雙審）的題，自動追加指派（維持雙審、不重複）
 app.post('/v1/assignments/sync-approved', (req, res) => {
   const b = req.body || {};

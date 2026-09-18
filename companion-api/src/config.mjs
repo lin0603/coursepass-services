@@ -30,6 +30,8 @@ config.adminPasscode = process.env.ADMIN_PASSCODE || '';
 config.explainDataUrl = process.env.EXPLAIN_DATA_URL || `${config.filesBase}/preview/knsh-math5.json`;
 // 每日批次：題庫活動格式（type/正確答案）
 config.appDataUrl = process.env.APP_DATA_URL || `${config.filesBase}/preview/knsh-math5-appdata.json`;
+// 課程清單（含各課程題庫資料 URL），用於覆蓋率等跨課程計算
+config.coursesUrl = process.env.COURSES_URL || `${config.filesBase}/preview/courses.json`;
 // 每日批次：預設課程與每次題數
 config.batchCourseId = process.env.BATCH_COURSE_ID || 'knsh-g5-math-115a';
 config.batchLimit = Number(process.env.BATCH_LIMIT || 100);
