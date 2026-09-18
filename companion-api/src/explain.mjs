@@ -123,12 +123,14 @@ const VARIANT_SYSTEM = [
   '答案必須唯一且正確（請自行驗算）。不要逐字重製原題；不可改變考點。',
   '至少改變 2 個維度：數值/單位、情境、問法、選項與干擾項、呈現形式、順序。',
   '只輸出 JSON：{"prompt":"...","options":["..."],"answer":"...","type":"choice|fill_blank","rationale":"為什麼這樣變（一句話）","figureNote":"若原題含圖，說明圖的處理"}。',
+  '數學式請用純文字（分數寫 3/5、帶分數寫 1 3/5），不要使用 LaTeX 或 $...$。',
   '若原題含圖：請務必另外用 figure 指定「以模板重繪」的圖形（圖需與題意一致，且答案要能從圖/題判斷）。只能用這些模板與參數：',
   '- {"template":"number_line","params":{"min":0,"max":10,"step":1,"marks":[{"value":3,"label":"甲"}]}}',
   '- {"template":"bar","params":{"categories":["甲","乙"],"values":[5,8]}}',
   '- {"template":"blocks","params":{"rows":3,"cols":4,"shaded":[[0,0]]}}',
   '- {"template":"points","params":{"xMax":6,"yMax":6,"points":[{"x":2,"y":3,"label":"A"}],"connect":false}}',
   '- {"template":"fraction_bar","params":{"den":5,"shaded":2}}',
+  '- {"template":"square_fracs","params":{"items":[{"label":"甲","den":6,"shaded":2},{"label":"乙","den":6,"shaded":2}]}}',
   '輸出 JSON 增加一個 key：figure={"template":"...","params":{...}}。',
 ].join('\n');
 

@@ -9,7 +9,7 @@ function esc(s) {
 function num(v, d = 0) { const n = Number(v); return Number.isFinite(n) ? n : d; }
 function clamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
 
-const TEMPLATES = ['number_line', 'bar', 'blocks', 'points', 'fraction_bar'];
+const TEMPLATES = ['number_line', 'bar', 'blocks', 'points', 'fraction_bar', 'square_fracs'];
 
 function numberLine(p) {
   const min = num(p.min, 0), max = num(p.max, 10), step = Math.max(0.0001, num(p.step, 1));
@@ -103,7 +103,29 @@ function fractionBar(p) {
   return { inner: parts.join(''), h: H };
 }
 
-const RENDERERS = { number_line: numberLine, bar, blocks, points, fraction_bar: fractionBar };
+function squareFracs(p) {
+  const items = (Array.isArray(p.items) ? p.items : []).slice(0, 6);
+  const s = 92, gap = 26, pad = 18, labelH = 26;
+  const H = s + pad * 2 + labelH;
+  const n = Math.max(1, items.length);
+  const gw = n * s + (n - 1) * gap;
+  const offX = (W - gw) / 2;
+  const parts = [`<rect width="${W}" height="${H}" fill="#fff"/>`];
+  items.forEach((it, i) => {
+    const den = clamp(Math.round(num(it.den, 4)), 2, 10);
+    const shaded = clamp(Math.round(num(it.shaded, 0)), 0, den);
+    const x0 = offX + i * (s + gap), y0 = pad;
+    for (let k = 0; k < den; k += 1) {
+      const cw = s / den;
+      parts.push(`<rect x="${(x0 + k * cw).toFixed(1)}" y="${y0}" width="${cw.toFixed(1)}" height="${s}" fill="${k < shaded ? '#d9d9d9' : '#fff'}" stroke="#2b2b2b" stroke-width="1"/>`);
+    }
+    parts.push(`<rect x="${x0}" y="${y0}" width="${s}" height="${s}" fill="none" stroke="#2b2b2b" stroke-width="2"/>`);
+    if (it.label) parts.push(`<text x="${(x0 + s / 2).toFixed(1)}" y="${y0 + s + 20}" font-size="15" fill="#2b2b2b" text-anchor="middle">${esc(it.label)}</text>`);
+  });
+  return { inner: parts.join(''), h: H };
+}
+
+const RENDERERS = { number_line: numberLine, bar, blocks, points, fraction_bar: fractionBar, square_fracs: squareFracs };
 
 export function isTemplate(t) { return TEMPLATES.includes(t); }
 
