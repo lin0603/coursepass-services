@@ -8,7 +8,7 @@ import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
-import { explainQuestion, generateVariant, regenerateExplanation, rewriteQuestion, verifyVariant } from './explain.mjs';
+import { explainQuestion, explainVariant, generateVariant, regenerateExplanation, rewriteQuestion, verifyVariant } from './explain.mjs';
 import { renderFigureSvg } from './figures.mjs';
 import { store } from './db.mjs';
 
@@ -177,6 +177,20 @@ const explainSchema = z.object({
   options: z.array(z.string().max(500)).max(8).optional(),
 });
 
+const explainVariantSchema = z.object({
+  id: z.string().min(1),
+  version: z.number().int(),
+  prompt: z.string().max(4000),
+  options: z.array(z.string().max(500)).max(8).optional(),
+  answer: z.string().max(2000).optional(),
+  type: z.string().max(64).optional(),
+  note: z.string().max(2000).optional(),
+});
+app.post('/v1/explain-variant', asyncHandler(async (req, res) => {
+  const parsed = explainVariantSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  res.json(await explainVariant(parsed.data));
+}));
 app.post('/v1/explain', asyncHandler(async (req, res) => {
   const parsed = explainSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });

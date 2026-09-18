@@ -64,6 +64,12 @@ export async function explainQuestion(input = {}) {
 }
 
 
+// 變化題（新題）的 AI 解說：以 id#v<version> 為快取鍵，與原題解題分開保存
+export async function explainVariant(input = {}) {
+  const key = `${input.id}#v${input.version}`;
+  return explainQuestion({ id: key, prompt: input.prompt, answer: input.answer, type: input.type, options: input.options, note: input.note });
+}
+
 // ---- AI 優化迴路：依老師審查意見改寫題目 ----
 const REWRITE_SYSTEM = [
   '你是台灣國小數學教材編輯。請依「老師審查意見」改寫題目，維持相同考點與難度，',

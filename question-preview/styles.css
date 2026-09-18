@@ -241,3 +241,13 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 
 .app-fig-svg { margin: 6px 0; padding: 4px; background: #fff; border: 1px solid #e2ebe7; border-radius: 8px; overflow: auto; }
 .app-fig-svg svg { display: block; max-width: 100%; height: auto; }
+
+.ai-collapse { margin: 8px 0; border: 1px solid #e2ebe7; border-radius: 10px; background: #fbfdfc; }
+.ai-collapse > summary { cursor: pointer; padding: 8px 10px; font-weight: 700; color: #1f6f5c; list-style: none; display: flex; align-items: center; gap: 6px; }
+.ai-collapse > summary::before { content: "▸"; font-size: 12px; }
+.ai-collapse[open] > summary::before { content: "▾"; }
+.ai-collapse > summary::-webkit-details-marker { display: none; }
+.ai-collapse .ai { border: none; background: transparent; margin: 0; padding: 0 10px 10px; }
+.ai-collapse .ai-head { display: none; }
+.var-ai { margin-top: 8px; }
+.var-ai .var-explain-out { white-space: normal; }

@@ -368,6 +368,15 @@ function variantAppHtml(it) {
   const label = v ? `v${v.version} · ${esc(v.payload.type || '')}` : '尚未產生';
   const head = `<div class="app-head">變化題（App 呈現） <span class="app-label">${label}</span></div>`;
   const btn = `<div class="ai-actions"><button type="button" class="ai-gen var-gen">${v ? '重新產生變化題' : '產生變化題'}</button><span class="ai-state var-state">${v && (v.quality || {}).status === 'needs_review' ? '品質需檢查' : ''}</span></div>`;
+  let explain = '';
+  if (v) {
+    const ekey = variantKey(it.id, v.version);
+    const ex = state.explanations[ekey];
+    explain = `<details class="ai-collapse var-ai"><summary>AI 解新題 <span class="ai-tag">解說變化題</span></summary>
+      <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
+      <div class="ai-out var-explain-out">${ex ? esc(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
+    </details>`;
+  }
   let inner = '<div class="app-prompt"><span class="app-none">尚未產生變化題</span></div>';
   let review = '';
   if (v) {
@@ -399,7 +408,7 @@ function variantAppHtml(it) {
     review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
   }
-  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div>${review}</section>`;
+  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div>${explain}${review}</section>`;
 }
 
 // App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
@@ -593,6 +602,7 @@ function render() {
             <div class="fig-cap">題目原圖</div>
             ${it.imageUrl ? `<a class="fig" href="${it.imageUrl}" target="_blank"><img loading="lazy" src="${it.imageUrl}" alt="題目原圖"></a>` : '<div class="noimg">無圖</div>'}
           </div>
+          <details class="ai-collapse orig-ai"><summary>用 Gemini AI 解題 <span class="ai-tag">原題・需淺顯易懂</span></summary>${aiHtml(it)}</details>
         </div>
         <div class="col-right">
           <div class="app-pair">
@@ -602,7 +612,6 @@ function render() {
           ${reviewHtml(it)}
         </div>
         <div class="col-ai">
-          ${aiHtml(it)}
           ${revisionHtml(it)}
         </div>
       </div>`;
@@ -710,6 +719,31 @@ el.list.addEventListener('click', async (event) => {
     }
     state.matchingPlay[id] = play;
     render();
+    return;
+  }
+  const varExplain = event.target.closest('.var-explain');
+  if (varExplain) {
+    const section = varExplain.closest('.app-variant');
+    const id = section.dataset.id;
+    const v = (state.variants[id] || [])[0];
+    if (!v) return;
+    const key = varExplain.dataset.vkey;
+    const stEl = section.querySelector('.var-explain-state');
+    const outEl = section.querySelector('.var-explain-out');
+    stEl.textContent = '產生中…'; varExplain.disabled = true;
+    try {
+      const p = v.payload || {};
+      const res = await fetch(`${EXPLAIN_API}/v1/explain-variant`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ id, version: v.version, prompt: stripHtml(p.prompt || ''), options: p.options || [], answer: String(p.answer || ''), type: p.type || '' }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.explanation) throw new Error(d.error || res.status || 'empty');
+      state.explanations[key] = d.explanation;
+      stEl.textContent = '已解說（保留，無需再按）';
+      outEl.innerHTML = esc(d.explanation).replace(/\n/g, '<br>');
+      varExplain.hidden = true;
+    } catch (e) { stEl.textContent = '失敗：' + e.message; varExplain.disabled = false; }
     return;
   }
   const varGen = event.target.closest('.var-gen');
