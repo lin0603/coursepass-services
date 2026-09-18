@@ -499,11 +499,11 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     if (!exact.has(k)) exact.set(k, []);
     exact.get(k).push(x);
   }
-  const byLesson = new Map();
+  const byLesson = new Map(); const byNode = new Map();
   for (const x of items) {
-    if (!allow(x) || !x.chapter) continue;
-    if (!byLesson.has(x.chapter)) byLesson.set(x.chapter, []);
-    byLesson.get(x.chapter).push(x);
+    if (!allow(x)) continue;
+    if (x.chapter) { if (!byLesson.has(x.chapter)) byLesson.set(x.chapter, []); byLesson.get(x.chapter).push(x); }
+    if (x.node) { if (!byNode.has(x.node)) byNode.set(x.node, []); byNode.get(x.node).push(x); }
   }
   const lessons = [...new Set(items.map((x) => x.chapter).filter(Boolean))].sort();
   const diffs = [...new Set(items.map((x) => x.difficulty).filter(Boolean))].sort();
@@ -514,7 +514,21 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     if (need <= 0) continue;
     let pool = (exact.get(k) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k));
     let same = true;
-    if (pool.length < need) { same = false; const extra = (byLesson.get(l) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k) && !pool.includes(x)); pool = pool.concat(extra); }
+    if (pool.length < need) {
+      same = false;
+      const seenIds = new Set(pool.map((x) => x.id));
+      const extraL = (byLesson.get(l) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k) && !seenIds.has(x.id));
+      extraL.forEach((x) => seenIds.add(x.id));
+      pool = pool.concat(extraL);
+      if (pool.length < need) {
+        const node = (exact.get(k) || [])[0] ? (exact.get(k) || [])[0].node : null;
+        const nodeQ = node || (items.find((x) => x.chapter === l) || {}).node;
+        if (nodeQ) {
+          const extraN = (byNode.get(nodeQ) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k) && !seenIds.has(x.id));
+          pool = pool.concat(extraN);
+        }
+      }
+    }
     if (!pool.length) continue;
     gaps.push({ k, lesson: l, difficulty: d, need, pool: pool.map((x) => x.id), same });
   }
