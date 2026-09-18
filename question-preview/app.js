@@ -417,7 +417,7 @@ function variantSideHtml(it) {
   if (!v) return '';
   const ekey = variantKey(it.id, v.version);
   const ex = state.explanations[ekey];
-  const explain = `<details class="ai-collapse var-ai"><summary>AI 解新題 <span class="ai-tag">解說變化題</span></summary>
+  const explain = `<details class="ai-collapse var-ai"${ex ? ' open' : ''}><summary>AI 解新題 <span class="ai-tag">解說變化題</span></summary>
       <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
       <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
     </details>`;
