@@ -388,6 +388,7 @@ async function generateVariantRow(id, input) {
       if (!multiQ && !allAbove && idxs.length > 1) reasons.push('self_verify_multiple');
     } catch (e) { console.error('verify failed', id, e.message); }
   }
+  if (input.targetCell) payload.targetCell = input.targetCell;
   const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons, verify };
   return store.addVariant({ sourceQuestionId: id, nodeId: input.node, courseId: input.courseId, payload, rationale: payload.rationale, model: out.model, quality });
 }
@@ -479,42 +480,65 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     if (!['multiple_choice', 'choice', 'fill_blank', 'true_false', 'matching'].includes((v.payload || {}).type)) continue;
     const k = `${s2.chapter}\u0000${s2.difficulty}`; counts.set(k, (counts.get(k) || 0) + 1);
   }
-  // 候選來源題
-  const cand = new Map();
+  // 候選來源題（優先同格；不足時用同小節其他難度 → 同知識節點）
+  const exact = new Map();
   for (const x of items) {
     if (!x.chapter || !x.difficulty || !allow(x)) continue;
     const k = `${x.chapter}\u0000${x.difficulty}`;
-    if (!cand.has(k)) cand.set(k, []);
-    cand.get(k).push(x.id);
+    if (!exact.has(k)) exact.set(k, []);
+    exact.get(k).push(x);
   }
-  const cells = [...counts.keys()].concat([...cand.keys()]).filter((v, i, a) => a.indexOf(v) === i);
+  const byLesson = new Map(); const byNode = new Map();
+  for (const x of items) {
+    if (!allow(x)) continue;
+    if (x.chapter) { if (!byLesson.has(x.chapter)) byLesson.set(x.chapter, []); byLesson.get(x.chapter).push(x); }
+    if (x.node) { if (!byNode.has(x.node)) byNode.set(x.node, []); byNode.get(x.node).push(x); }
+  }
+  const lessons = [...new Set(items.map((x) => x.chapter).filter(Boolean))].sort();
+  const diffs = [...new Set(items.map((x) => x.difficulty).filter(Boolean))].sort();
   const gaps = [];
-  for (const k of cells) {
-    const have = counts.get(k) || 0; const need = Math.max(0, target - have);
-    if (need > 0 && (cand.get(k) || []).length) gaps.push({ k, need, ids: cand.get(k) });
+  for (const l of lessons) for (const d of diffs) {
+    const k = `${l}\u0000${d}`;
+    const have = counts.get(k) || 0; const need = target - have;
+    if (need <= 0) continue;
+    let pool = (exact.get(k) || []).slice();
+    let same = true;
+    if (!pool.length) {
+      same = false;
+      pool = (byLesson.get(l) || []).slice();
+    }
+    if (!pool.length) continue; // 連同小節都沒有可用來源 → 跳過
+    gaps.push({ k, lesson: l, difficulty: d, need, pool, same });
   }
-  gaps.sort((a, b) => b.need - a.need);
-  // 規劃：每格缺口用不同來源題（輪替），總量 limit
+  gaps.sort((a, b) => b.need - a.need || a.k.localeCompare(b.k));
+  // 規劃（每格輪替不同來源題）
   const plan = [];
-  let i = 0;
-  while (plan.length < limit) {
+  for (let i = 0; plan.length < limit; i += 1) {
     let progressed = false;
     for (const g of gaps) {
-      if (i < g.need) { plan.push({ cell: g.k, id: g.ids[i % g.ids.length] }); progressed = true; if (plan.length >= limit) break; }
+      if (i < g.need) {
+        const src2 = g.pool[(i + g.k.length) % g.pool.length];
+        plan.push({ cell: g.k, lesson: g.lesson, difficulty: g.difficulty, id: src2.id, same: g.same });
+        progressed = true;
+        if (plan.length >= limit) break;
+      }
     }
-    i += 1;
     if (!progressed) break;
   }
-  if (b.dryRun) return res.json({ dryRun: true, target, limit, gaps: gaps.slice(0, 12).map((g) => ({ cell: g.k.split('\u0000').join(' × '), need: g.need })), planned: plan.length });
+  if (b.dryRun) return res.json({ dryRun: true, target, limit, gaps: gaps.slice(0, 12).map((g) => ({ cell: g.k.split('\u0000').join(' × '), need: g.need, sameCell: g.same })), planned: plan.length });
   let ok = 0; let nr = 0; let failed = 0;
-  const seen = new Set();
-  const queue = plan.filter((p) => { const key = `${p.id}#${p.cell}`; if (seen.has(key)) return false; seen.add(key); return true; });
+  const queue = plan;
   const run = async (p) => {
     const q = byId.get(p.id); if (!q) return;
     const a = app[q.id] || {};
     let type = a.type || q.type; if (type === 'multiple_choice') type = 'choice';
     try {
-      const row = await generateVariantRow(p.id, { prompt: q.prompt || '', options: (q.options || []).map((o) => (typeof o === 'object' ? o.content : o)), answer: String(q.answer || ''), type, node: q.node, nodeName: q.nodeName, difficulty: q.difficulty, hasFigure: false, courseId });
+      const row = await generateVariantRow(p.id, {
+        prompt: q.prompt || '', options: (q.options || []).map((o) => (typeof o === 'object' ? o.content : o)),
+        answer: String(q.answer || ''), type, node: q.node, nodeName: q.nodeName,
+        difficulty: p.difficulty, hasFigure: false, courseId,
+        targetCell: { chapter: p.lesson, difficulty: p.difficulty },
+      });
       if ((row.quality || {}).status === 'ok') ok += 1; else nr += 1;
     } catch (e) { failed += 1; console.error('fill-gaps failed', p.id, e.message); }
   };
@@ -593,7 +617,10 @@ app.get('/v1/coverage', asyncHandler(async (req, res) => {
       if (!ok) continue;
       const vt = (v.payload || {}).type;
       if (!PLAYABLE.has(vt)) continue;
-      const k = cellsOf({ chapter: src.chapter, difficulty: src.difficulty, type: vt }).join('\u0000');
+      const tc = (v.payload || {}).targetCell;
+      const ch2 = (tc && tc.chapter) || src.chapter;
+      const df2 = (tc && tc.difficulty) || src.difficulty;
+      const k = cellsOf({ chapter: ch2, difficulty: df2, type: vt }).join('\u0000');
       counts.set(k, (counts.get(k) || 0) + 1);
     }
   }
