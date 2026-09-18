@@ -477,12 +477,14 @@ const coverageSchema = z.object({
   cell: z.enum(['lesson_difficulty', 'lesson_difficulty_type']).optional(),
   scope: z.enum(['playable_nofigure', 'playable', 'all']).optional(),
   target: z.coerce.number().int().min(1).max(20).optional(),
+  countVariants: z.coerce.number().int().min(0).max(1).optional(),
 });
 app.get('/v1/coverage', asyncHandler(async (req, res) => {
   const q = coverageSchema.parse(req.query || {});
   const target = q.target || 5;
   const cell = q.cell || 'lesson_difficulty';
   const scope = q.scope || 'playable_nofigure';
+  const countVariants = q.countVariants === 1;
   const courses = (await loadCourses()).courses || [];
   const found = courses.find((c) => c.courseId === q.course) || null;
   const url = (found && found.data && found.data.questions) || config.explainDataUrl;
@@ -504,6 +506,21 @@ app.get('/v1/coverage', asyncHandler(async (req, res) => {
     if (!x.chapter || !x.difficulty || !allow(x)) continue;
     const k = cellsOf(x).join('\u0000');
     counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  if (countVariants) {
+    const byId = new Map(items.map((x) => [x.id, x]));
+    const latest = {};
+    for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+    for (const [qid, v] of Object.entries(latest)) {
+      const src = byId.get(qid);
+      if (!src || !src.chapter || !src.difficulty || src.hasFigure) continue;
+      const ok = (v.quality || {}).status === 'ok' || v.status === 'approved';
+      if (!ok) continue;
+      const vt = (v.payload || {}).type;
+      if (!PLAYABLE.has(vt)) continue;
+      const k = cellsOf({ chapter: src.chapter, difficulty: src.difficulty, type: vt }).join('\u0000');
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
   }
   const allCells = [];
   for (const l of lessons) {
@@ -531,11 +548,87 @@ app.get('/v1/coverage', asyncHandler(async (req, res) => {
     cellsMet,
     questionsNeeded,
     targetTotal: target * allCells.length,
+    countVariants,
     playableCount: items.filter(allow).length,
     totalCount: items.length,
     byDifficulty: [...byDifficulty.values()].sort((a, b) => a.key.localeCompare(b.key)),
     byLesson: [...byLesson.values()].sort((a, b) => b.gap - a.gap),
   });
+}));
+
+// ---- 缺口補題：依（小節 × 難度）缺口產生變化題 ----
+const fillGapsSchema = z.object({
+  target: z.number().int().min(1).max(20).optional(),
+  courseId: z.string().max(64).optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  concurrency: z.number().int().min(1).max(6).optional(),
+  dryRun: z.boolean().optional(),
+});
+app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
+  const b = fillGapsSchema.safeParse(req.body || {}).data || {};
+  const target = b.target || 5;
+  const limit = b.limit || 60;
+  const courseId = b.courseId || config.batchCourseId;
+  const [src, appd] = await Promise.all([
+    fetch(config.explainDataUrl).then((r) => r.json()).catch(() => ({ items: [] })),
+    fetch(config.appDataUrl).then((r) => r.json()).catch(() => ({ items: {} })),
+  ]);
+  const items = src.items || []; const app = appd.items || {};
+  const allow = (x) => !x.hasFigure && ['multiple_choice', 'choice', 'fill_blank', 'true_false', 'matching'].includes(x.type);
+  const byId = new Map(items.map((q) => [q.id, q]));
+  // 目前計數（含變化題）
+  const counts = new Map();
+  for (const x of items) { if (x.chapter && x.difficulty && allow(x)) { const k = `${x.chapter}\u0000${x.difficulty}`; counts.set(k, (counts.get(k) || 0) + 1); } }
+  const latest = {};
+  for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+  for (const [qid, v] of Object.entries(latest)) {
+    const s2 = byId.get(qid); if (!s2 || !s2.chapter || !s2.difficulty || s2.hasFigure) continue;
+    const ok = (v.quality || {}).status === 'ok' || v.status === 'approved'; if (!ok) continue;
+    if (!['multiple_choice', 'choice', 'fill_blank', 'true_false', 'matching'].includes((v.payload || {}).type)) continue;
+    const k = `${s2.chapter}\u0000${s2.difficulty}`; counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  // 候選來源題
+  const cand = new Map();
+  for (const x of items) {
+    if (!x.chapter || !x.difficulty || !allow(x)) continue;
+    const k = `${x.chapter}\u0000${x.difficulty}`;
+    if (!cand.has(k)) cand.set(k, []);
+    cand.get(k).push(x.id);
+  }
+  const cells = [...counts.keys()].concat([...cand.keys()]).filter((v, i, a) => a.indexOf(v) === i);
+  const gaps = [];
+  for (const k of cells) {
+    const have = counts.get(k) || 0; const need = Math.max(0, target - have);
+    if (need > 0 && (cand.get(k) || []).length) gaps.push({ k, need, ids: cand.get(k) });
+  }
+  gaps.sort((a, b) => b.need - a.need);
+  // 規劃：每格缺口用不同來源題（輪替），總量 limit
+  const plan = [];
+  let i = 0;
+  while (plan.length < limit) {
+    let progressed = false;
+    for (const g of gaps) {
+      if (i < g.need) { plan.push({ cell: g.k, id: g.ids[i % g.ids.length] }); progressed = true; if (plan.length >= limit) break; }
+    }
+    i += 1;
+    if (!progressed) break;
+  }
+  if (b.dryRun) return res.json({ dryRun: true, target, limit, gaps: gaps.slice(0, 12).map((g) => ({ cell: g.k.split('\u0000').join(' × '), need: g.need })), planned: plan.length });
+  let ok = 0; let nr = 0; let failed = 0;
+  const seen = new Set();
+  const queue = plan.filter((p) => { const key = `${p.id}#${p.cell}`; if (seen.has(key)) return false; seen.add(key); return true; });
+  const run = async (p) => {
+    const q = byId.get(p.id); if (!q) return;
+    const a = app[q.id] || {};
+    let type = a.type || q.type; if (type === 'multiple_choice') type = 'choice';
+    try {
+      const row = await generateVariantRow(p.id, { prompt: q.prompt || '', options: (q.options || []).map((o) => (typeof o === 'object' ? o.content : o)), answer: String(q.answer || ''), type, node: q.node, nodeName: q.nodeName, difficulty: q.difficulty, hasFigure: false, courseId });
+      if ((row.quality || {}).status === 'ok') ok += 1; else nr += 1;
+    } catch (e) { failed += 1; console.error('fill-gaps failed', p.id, e.message); }
+  };
+  const q2 = [...queue];
+  await Promise.all(Array.from({ length: b.concurrency || 3 }, async () => { while (q2.length) { const p = q2.shift(); await run(p); } }));
+  res.json({ target, planned: queue.length, ok, needs_review: nr, failed, gaps: gaps.slice(0, 12).map((g) => ({ cell: g.k.split('\u0000').join(' × '), need: g.need })) });
 }));
 
 // 將「已合格」但尚未指派（或不足雙審）的題，自動追加指派（維持雙審、不重複）

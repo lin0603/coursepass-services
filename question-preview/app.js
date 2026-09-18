@@ -1250,6 +1250,7 @@ const coverageClose = document.getElementById('coverageClose');
 const coverageBody = document.getElementById('coverageBody');
 const coverageTitle = document.getElementById('coverageTitle');
 let covTarget = 5;
+let covWithVariants = false;
 function covBar(met, total, gap) {
   const pct = total ? Math.round((met / total) * 100) : 0;
   return `<div class="cov-row">
@@ -1262,12 +1263,13 @@ async function renderCoverage() {
   if (!coverageBody) return;
   coverageBody.innerHTML = '<p class="muted">計算中…</p>';
   try {
-    const res = await fetch(`${REVIEWS_API}/v1/coverage?course=${encodeURIComponent(state.courseId || '')}&target=${covTarget}&cell=lesson_difficulty&scope=playable_nofigure`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
+    const res = await fetch(`${REVIEWS_API}/v1/coverage?course=${encodeURIComponent(state.courseId || '')}&target=${covTarget}&cell=lesson_difficulty&scope=playable_nofigure&countVariants=${covWithVariants ? 1 : 0}`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || res.status);
     if (coverageTitle) coverageTitle.textContent = `課程覆蓋率 · ${d.courseName || d.courseId || ''}`;
     const pct = d.cellsTotal ? Math.round((d.cellsMet / d.cellsTotal) * 100) : 0;
-    const targets = [3, 5, 8].map((t) => `<button type="button" class="cov-t${t === covTarget ? ' on' : ''}" data-target="${t}">每格 ${t} 題</button>`).join('');
+    const targets = [3, 5, 8].map((t) => `<button type="button" class="cov-t${t === covTarget ? ' on' : ''}" data-target="${t}">每格 ${t} 題</button>`).join('')
+      + `<label class="cov-cb"><input type="checkbox" id="covVar"${covWithVariants ? ' checked' : ''}> 計入變化題</label>`;
     const diffs = (d.byDifficulty || []).map((x) => covBar(x.met, x.total, x.gap)).join('');
     const lessons = (d.byLesson || []).filter((x) => x.gap > 0).slice(0, 6).map((x) => `<div class="cov-lesson"><div class="cov-lname" title="${esc(x.key)}">${esc(String(x.key || '').split('・').pop().trim())}</div>${covBar(x.met, x.total, x.gap)}</div>`).join('');
     coverageBody.innerHTML = `
@@ -1281,6 +1283,8 @@ async function renderCoverage() {
       <h3>缺口最多的區塊</h3>${lessons || '<p class="muted">全部達標</p>'}
       <p class="help-tip">「已達成」＝達到目標題數的格數；「需補」＝未達標格子的缺額總和；「目標總量」＝目標題數 × 總格數。</p>`;
     coverageBody.querySelectorAll('.cov-t').forEach((b) => b.addEventListener('click', (e) => { covTarget = Number(e.target.dataset.target); renderCoverage(); }));
+    const cb = coverageBody.querySelector('#covVar');
+    if (cb) cb.addEventListener('change', (e) => { covWithVariants = e.target.checked; renderCoverage(); });
   } catch (e) {
     coverageBody.innerHTML = `<p class="muted">讀取失敗：${esc(e.message)}</p>`;
   }

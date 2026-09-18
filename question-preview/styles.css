@@ -299,3 +299,4 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .cov-num { color: #1f2b2a; font-size: 12px; white-space: nowrap; }
 .cov-lesson { margin: 6px 0; }
 .cov-lname { font-size: 12px; color: #536c72; margin-bottom: 2px; }
+.cov-cb { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #536c72; }
