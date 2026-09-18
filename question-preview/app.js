@@ -1243,6 +1243,54 @@ if (helpClose) helpClose.addEventListener('click', () => showHelp(false));
 if (helpModal) helpModal.addEventListener('click', (e) => { if (e.target === helpModal) showHelp(false); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && helpModal && !helpModal.hidden) showHelp(false); });
 
+// ---- 覆蓋率面板（可收合；依目前課程自動計算）----
+const coverageBtn = document.getElementById('coverageBtn');
+const coverageModal = document.getElementById('coverageModal');
+const coverageClose = document.getElementById('coverageClose');
+const coverageBody = document.getElementById('coverageBody');
+const coverageTitle = document.getElementById('coverageTitle');
+let covTarget = 5;
+function covBar(met, total, gap) {
+  const pct = total ? Math.round((met / total) * 100) : 0;
+  return `<div class="cov-row">
+    <div class="cov-label">${pct}%</div>
+    <div class="cov-bar"><span style="width:${pct}%"></span></div>
+    <div class="cov-num">${met}/${total} 格${gap ? `（缺 ${gap}）` : ''}</div>
+  </div>`;
+}
+async function renderCoverage() {
+  if (!coverageBody) return;
+  coverageBody.innerHTML = '<p class="muted">計算中…</p>';
+  try {
+    const res = await fetch(`${REVIEWS_API}/v1/coverage?course=${encodeURIComponent(state.courseId || '')}&target=${covTarget}&cell=lesson_difficulty&scope=playable_nofigure`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.status);
+    if (coverageTitle) coverageTitle.textContent = `課程覆蓋率 · ${d.courseName || d.courseId || ''}`;
+    const pct = d.cellsTotal ? Math.round((d.cellsMet / d.cellsTotal) * 100) : 0;
+    const targets = [3, 5, 8].map((t) => `<button type="button" class="cov-t${t === covTarget ? ' on' : ''}" data-target="${t}">每格 ${t} 題</button>`).join('');
+    const diffs = (d.byDifficulty || []).map((x) => covBar(x.met, x.total, x.gap)).join('');
+    const lessons = (d.byLesson || []).filter((x) => x.gap > 0).slice(0, 6).map((x) => `<div class="cov-lesson"><div class="cov-lname" title="${esc(x.key)}">${esc(String(x.key || '').split('・').pop().trim())}</div>${covBar(x.met, x.total, x.gap)}</div>`).join('');
+    coverageBody.innerHTML = `
+      <div class="cov-targets">覆蓋單位：小節 × 難度（可玩且非圖）　${targets}</div>
+      <div class="cov-overall">
+        <div class="cov-big">${d.cellsMet}/${d.cellsTotal} 格（${pct}%）</div>
+        <div class="cov-bar big"><span style="width:${pct}%"></span></div>
+        <div class="cov-sum">目標總量 <b>${d.targetTotal}</b> 題 ・ 需補 <b>${d.questionsNeeded}</b> 題　<span class="muted">（可玩 ${d.playableCount} / 全部 ${d.totalCount}）</span></div>
+      </div>
+      <h3>依難度</h3>${diffs || '<p class="muted">無資料</p>'}
+      <h3>缺口最多的區塊</h3>${lessons || '<p class="muted">全部達標</p>'}
+      <p class="help-tip">「已達成」＝達到目標題數的格數；「需補」＝未達標格子的缺額總和；「目標總量」＝目標題數 × 總格數。</p>`;
+    coverageBody.querySelectorAll('.cov-t').forEach((b) => b.addEventListener('click', (e) => { covTarget = Number(e.target.dataset.target); renderCoverage(); }));
+  } catch (e) {
+    coverageBody.innerHTML = `<p class="muted">讀取失敗：${esc(e.message)}</p>`;
+  }
+}
+if (coverageBtn) coverageBtn.addEventListener('click', () => { coverageModal.hidden = false; renderCoverage(); });
+if (coverageClose) coverageClose.addEventListener('click', () => { coverageModal.hidden = true; });
+if (coverageModal) coverageModal.addEventListener('click', (e) => { if (e.target === coverageModal) coverageModal.hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && coverageModal && !coverageModal.hidden) coverageModal.hidden = true; });
+
+
 // ---- 簡易登入（通行碼）----
 const loggedIn = () => localStorage.getItem('cp_pass') === '1';
 const isAdmin = () => localStorage.getItem('cp_admin') === '1';

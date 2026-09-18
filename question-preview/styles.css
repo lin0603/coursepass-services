@@ -283,3 +283,19 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .variant-side .ai-collapse.var-ai > summary .ai-tag { background: rgba(255,255,255,.22); color: #fff; border-radius: 999px; padding: 2px 8px; }
 .variant-side .ai-collapse.var-ai > .ai-actions,
 .variant-side .ai-collapse.var-ai > .ai-out { padding: 8px 14px 10px; }
+
+/* 覆蓋率面板 */
+.cov-targets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #536c72; font-size: 13px; margin-bottom: 10px; }
+.cov-targets .cov-t { background: #eef4f1; border: 1px solid #cfe0dd; color: #1d3a48; border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; }
+.cov-targets .cov-t.on { background: #087e8b; border-color: #087e8b; color: #fff; font-weight: 700; }
+.cov-overall { border: 1px solid #e2ebe7; border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; }
+.cov-big { font-weight: 800; color: #1d3a48; margin-bottom: 6px; }
+.cov-sum { margin-top: 6px; color: #1f2b2a; font-size: 13px; }
+.cov-row { display: grid; grid-template-columns: 46px 1fr auto; gap: 8px; align-items: center; margin: 5px 0; }
+.cov-label { color: #536c72; font-size: 12px; text-align: right; }
+.cov-bar { background: #e6ece9; border-radius: 999px; height: 14px; overflow: hidden; }
+.cov-bar.big { height: 18px; }
+.cov-bar > span { display: block; height: 100%; background: #2fbf6f; }
+.cov-num { color: #1f2b2a; font-size: 12px; white-space: nowrap; }
+.cov-lesson { margin: 6px 0; }
+.cov-lname { font-size: 12px; color: #536c72; margin-bottom: 2px; }

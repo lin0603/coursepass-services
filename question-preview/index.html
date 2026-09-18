@@ -14,7 +14,7 @@
 <meta name="preview-courses" content="https://resource-files-dev.starxinteractive.com/preview/courses.json">
 <meta name="resource-index" content="https://resource-index-dev.starxinteractive.com">
 <title>適康 數學 五年級 題目審查</title>
-<link rel="stylesheet" href="./styles.css?v=20260918n">
+<link rel="stylesheet" href="./styles.css?v=20260918o">
 </head>
 <body>
 <div id="loginGate" class="login-gate" hidden>
@@ -36,6 +36,7 @@
     <button type="button" class="mode-btn on" data-mode="quiz">測驗模式</button>
     <button type="button" class="mode-btn" data-mode="answer">解答模式</button>
   </div>
+  <button id="coverageBtn" class="mode-btn" type="button">覆蓋率</button>
   <button id="helpBtn" class="mode-btn" type="button">使用說明</button>
 </header>
 
@@ -92,6 +93,15 @@
     </div>
   </div>
 </div>
+<div id="coverageModal" class="help-overlay" hidden>
+  <div class="help-dialog">
+    <div class="help-head">
+      <span id="coverageTitle">課程覆蓋率</span>
+      <button id="coverageClose" class="mode-btn" type="button">✕ 關閉</button>
+    </div>
+    <div class="help-body" id="coverageBody"></div>
+  </div>
+</div>
 <div class="filters">
   <select id="fChapter"><option value="">全部章節</option></select>
   <select id="fNode"><option value="">全部知識節點</option></select>
@@ -116,6 +126,6 @@
 <div id="figZoom" class="fig-zoom" hidden><img alt="放大題目原圖"></div>
 <main id="list" class="list"></main>
 <div id="more" class="more"></div>
-<script src="./app.js?v=20260918n"></script>
+<script src="./app.js?v=20260918o"></script>
 </body>
 </html>
