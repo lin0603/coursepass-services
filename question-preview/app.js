@@ -374,7 +374,7 @@ function variantAppHtml(it) {
     const ex = state.explanations[ekey];
     explain = `<details class="ai-collapse var-ai"><summary>AI 解新題 <span class="ai-tag">解說變化題</span></summary>
       <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
-      <div class="ai-out var-explain-out">${ex ? esc(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
+      <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
     </details>`;
   }
   let inner = '<div class="app-prompt"><span class="app-none">尚未產生變化題</span></div>';
@@ -515,7 +515,7 @@ function othersHtml(id) {
 
 function aiHtml(it) {
   const ex = state.explanations[it.id];
-  const out = ex ? esc(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解題（可先按「產生解題」）</span>';
+  const out = ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解題（可先按「產生解題」）</span>';
   const genBtn = ex ? '' : '<button type="button" class="ai-gen">產生解題</button>';
   const mine = reviewOf(it.id);
   const ai = mine.aiStatus || '';
@@ -741,7 +741,7 @@ el.list.addEventListener('click', async (event) => {
       if (!res.ok || !d.explanation) throw new Error(d.error || res.status || 'empty');
       state.explanations[key] = d.explanation;
       stEl.textContent = '已解說（保留，無需再按）';
-      outEl.innerHTML = esc(d.explanation).replace(/\n/g, '<br>');
+      outEl.innerHTML = vmath(d.explanation).replace(/\n/g, '<br>');
       varExplain.hidden = true;
     } catch (e) { stEl.textContent = '失敗：' + e.message; varExplain.disabled = false; }
     return;
@@ -963,7 +963,7 @@ el.list.addEventListener('click', async (event) => {
       const ex = await explainQuestion(item);
       state.explanations[id] = ex;
       stateEl.textContent = '已解題（保留，無需再按）';
-      section.querySelector('.ai-out').innerHTML = esc(ex).replace(/\n/g, '<br>');
+      section.querySelector('.ai-out').innerHTML = vmath(ex).replace(/\n/g, '<br>');
       aiGen.remove();
     } catch (e) { stateEl.textContent = '失敗：' + e.message; aiGen.disabled = false; }
     return;
