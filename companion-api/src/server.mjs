@@ -480,7 +480,18 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     if (!['multiple_choice', 'choice', 'fill_blank', 'true_false', 'matching'].includes((v.payload || {}).type)) continue;
     const k = `${s2.chapter}\u0000${s2.difficulty}`; counts.set(k, (counts.get(k) || 0) + 1);
   }
-  // 候選來源題（優先同格；不足時用同小節其他難度 → 同知識節點）
+  // 已貢獻的來源題（最新版本 ok/approved）→ 避免重複產生（同題新版本不會增加覆蓋）
+  const contrib = new Map(); // sourceId -> Set(cellKey)
+  for (const [qid, v] of Object.entries(latest)) {
+    const s2 = byId.get(qid); if (!s2 || !s2.chapter || !s2.difficulty || s2.hasFigure) continue;
+    const ok = (v.quality || {}).status === 'ok' || v.status === 'approved'; if (!ok) continue;
+    if (!['multiple_choice', 'choice', 'fill_blank', 'true_false', 'matching'].includes((v.payload || {}).type)) continue;
+    const tc = (v.payload || {}).targetCell;
+    const k2 = `${(tc && tc.chapter) || s2.chapter}\u0000${(tc && tc.difficulty) || s2.difficulty}`;
+    if (!contrib.has(qid)) contrib.set(qid, new Set());
+    contrib.get(qid).add(k2);
+  }
+  // 候選來源題（優先同格；不足時用同小節其他難度），排除已對該格貢獻者
   const exact = new Map();
   for (const x of items) {
     if (!x.chapter || !x.difficulty || !allow(x)) continue;
@@ -488,11 +499,11 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     if (!exact.has(k)) exact.set(k, []);
     exact.get(k).push(x);
   }
-  const byLesson = new Map(); const byNode = new Map();
+  const byLesson = new Map();
   for (const x of items) {
-    if (!allow(x)) continue;
-    if (x.chapter) { if (!byLesson.has(x.chapter)) byLesson.set(x.chapter, []); byLesson.get(x.chapter).push(x); }
-    if (x.node) { if (!byNode.has(x.node)) byNode.set(x.node, []); byNode.get(x.node).push(x); }
+    if (!allow(x) || !x.chapter) continue;
+    if (!byLesson.has(x.chapter)) byLesson.set(x.chapter, []);
+    byLesson.get(x.chapter).push(x);
   }
   const lessons = [...new Set(items.map((x) => x.chapter).filter(Boolean))].sort();
   const diffs = [...new Set(items.map((x) => x.difficulty).filter(Boolean))].sort();
@@ -501,27 +512,26 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     const k = `${l}\u0000${d}`;
     const have = counts.get(k) || 0; const need = target - have;
     if (need <= 0) continue;
-    let pool = (exact.get(k) || []).slice();
+    let pool = (exact.get(k) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k));
     let same = true;
-    if (!pool.length) {
-      same = false;
-      pool = (byLesson.get(l) || []).slice();
-    }
-    if (!pool.length) continue; // 連同小節都沒有可用來源 → 跳過
-    gaps.push({ k, lesson: l, difficulty: d, need, pool, same });
+    if (pool.length < need) { same = false; const extra = (byLesson.get(l) || []).filter((x) => !(contrib.get(x.id) || new Set()).has(k) && !pool.includes(x)); pool = pool.concat(extra); }
+    if (!pool.length) continue;
+    gaps.push({ k, lesson: l, difficulty: d, need, pool: pool.map((x) => x.id), same });
   }
   gaps.sort((a, b) => b.need - a.need || a.k.localeCompare(b.k));
-  // 規劃（每格輪替不同來源題）
+  // 規劃：同格不同來源、全域不重複
+  const usedSources = new Set();
   const plan = [];
-  for (let i = 0; plan.length < limit; i += 1) {
+  for (let round = 0; plan.length < limit; round += 1) {
     let progressed = false;
     for (const g of gaps) {
-      if (i < g.need) {
-        const src2 = g.pool[(i + g.k.length) % g.pool.length];
-        plan.push({ cell: g.k, lesson: g.lesson, difficulty: g.difficulty, id: src2.id, same: g.same });
-        progressed = true;
-        if (plan.length >= limit) break;
-      }
+      if (round >= g.need) continue;
+      const id = g.pool.find((x) => !usedSources.has(x));
+      if (!id) continue;
+      usedSources.add(id);
+      plan.push({ cell: g.k, lesson: g.lesson, difficulty: g.difficulty, id, same: g.same });
+      progressed = true;
+      if (plan.length >= limit) break;
     }
     if (!progressed) break;
   }
