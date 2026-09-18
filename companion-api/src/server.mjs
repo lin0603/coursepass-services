@@ -409,7 +409,8 @@ app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
   const byId = new Map(items.map((q) => [q.id, q]));
   const latest = {};
   for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
-  const adjust = []; const fresh = [];
+  const curModel = config.geminiModel;
+  const adjust = []; const flagged = []; const legacy = []; const fresh = [];
   for (const q of items) {
     if (!q || !q.id || q.hasFigure) continue;
     const a = app[q.id] || {};
@@ -417,11 +418,13 @@ app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
     if (type === 'multiple_choice') type = 'choice';
     if (type !== 'choice' && type !== 'fill_blank') continue;
     const l = latest[q.id];
-    if (l && l.status === 'approved') continue;
-    if (l && l.status === 'adjust') adjust.push(q.id);
-    else if (!l) fresh.push(q.id);
+    if (l && l.status === 'approved') continue;                 // 已合格不動
+    if (l && l.status === 'adjust') adjust.push(q.id);          // 1) 需調整：優先重生成
+    else if (l && l.status === 'proposed' && (l.quality || {}).status === 'needs_review') flagged.push(q.id); // 2) 未複核且有疑義
+    else if (l && l.status === 'proposed' && l.model && l.model !== curModel) legacy.push(q.id);              // 3) 舊模型生成：升級
+    else if (!l) fresh.push(q.id);                              // 4) 尚未產生（新題）
   }
-  const picks = [...adjust, ...fresh].slice(0, limit);
+  const picks = [...adjust, ...flagged, ...legacy, ...fresh].slice(0, limit);
   let ok = 0; let nr = 0; let failed = 0;
   const queue = [...picks];
   const run = async (id) => {
@@ -439,7 +442,7 @@ app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
   };
   const workers = Array.from({ length: b.concurrency || 3 }, async () => { while (queue.length) { const id = queue.shift(); await run(id); } });
   await Promise.all(workers);
-  res.json({ processed: picks.length, queuedAdjust: adjust.length, queuedNew: fresh.length, ok, needs_review: nr, failed, ids: picks });
+  res.json({ processed: picks.length, queuedAdjust: adjust.length, queuedFlagged: flagged.length, queuedLegacy: legacy.length, queuedNew: fresh.length, ok, needs_review: nr, failed, ids: picks });
 }));
 
 app.delete('/v1/variants/:id', (req, res) => {
