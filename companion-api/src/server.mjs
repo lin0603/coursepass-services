@@ -271,21 +271,19 @@ const variantSchema = z.object({
   hasFigure: z.boolean().optional(),
   courseId: z.string().max(64).optional(),
 });
-function stripLabel(x) {
-  return String(x || '')
+const UNIT = '(公斤|公升|公尺|公分|毫米|毫升|平方公尺|平方公分|個|片|塊|袋|箱|包|條|杯|瓶|本|頁|格|顆|人|元|組|張|盒|盤|把|件|支|枝|朵|次|天|分鐘|小時|週|年|種|份|堆|串|層|列|排|度|歲|樓|元)';
+function numVal(x) {
+  let t = String(x || '')
     .replace(/^\s*\(([A-Ha-h]|[1-8])\)\s*/, '')
     .replace(/^\s*([A-Ha-h]|[1-8])[.、:：](?![0-9])\s*/, '')
-    .trim();
-}
-function numVal(x) {
-  let t = stripLabel(x).replace(/[０-９．／－]/g, (c) => '0123456789./-'['０１２３４５６７８９．／－'.indexOf(c)] || c);
-  t = t.replace(/[^0-9./\-\s]/g, '').trim();
-  let m = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+    .trim()
+    .replace(/[０-９．／]/g, (c) => '0123456789./'['０１２３４５６７８９．／'.indexOf(c)]);
+  let m = t.match(new RegExp(`^(\\d+)\\s+(\\d+)\\s*\\/\\s*(\\d+)\\s*${UNIT}?$`));
   if (m) return Number(m[1]) + Number(m[2]) / Number(m[3]);
-  m = t.match(/^(\d+)\s*\/\s*(\d+)$/);
+  m = t.match(new RegExp(`^(\\d+)\\s*\\/\\s*(\\d+)\\s*${UNIT}?$`));
   if (m) return Number(m[1]) / Number(m[2]);
-  m = t.match(/^-?\d+(\.\d+)?$/);
-  if (m) return Number(m[0]);
+  m = t.match(new RegExp(`^-?\\d+(\\.\\d+)?\\s*${UNIT}?$`));
+  if (m) return Number(m[0].match(/^-?\d+(\.\d+)?/)[0]);
   return null;
 }
 const OPT_L = 'ABCDEFGH';
@@ -359,7 +357,8 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
       verify = { answer: vr.answer, allCorrect: vr.allCorrect, matchedCount: idxs.length, reason: vr.reason, model: vr.model };
       if (!sameAnswer(payload.answer, vr.answer, opts2)) reasons.push('self_verify_mismatch');
       const multiQ = /複選|多選|所有|哪些|全部寫出|哪些人|哪幾個/.test(String(payload.prompt || ''));
-      if (!multiQ && idxs.length > 1) reasons.push('self_verify_multiple');
+      const allAbove = opts2.some((o) => /以上皆是|以上都|皆正確|全部都|都正確|以上都對/.test(String(o)));
+      if (!multiQ && !allAbove && idxs.length > 1) reasons.push('self_verify_multiple');
     } catch (e) { console.error('verify failed', req.params.id, e.message); }
   }
   const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons, verify };
