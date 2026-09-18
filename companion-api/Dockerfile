@@ -7,6 +7,7 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
+COPY scripts ./scripts
 COPY package.json ./
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* && mkdir -p /app/data
 ENV PORT=8080
