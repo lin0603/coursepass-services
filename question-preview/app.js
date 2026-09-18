@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, varFilter: '', courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -13,6 +13,7 @@ const el = {
   fReview: document.getElementById('fReview'),
   fImage: document.getElementById('fImage'),
   fQuality: document.getElementById('fQuality'),
+  fVarQuality: document.getElementById('fVarQuality'),
   meSelect: document.getElementById('meSelect'),
   myProgress: document.getElementById('myProgress'),
   addReviewer: document.getElementById('addReviewer'),
@@ -44,6 +45,32 @@ function correctIndex(a, n) {
   return -1;
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// 變化題數字呈現：與 App（MathML 分數）一致
+function vfrac(whole, num, den) {
+  const head = whole ? `<mn>${whole}</mn>` : '';
+  return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">${head}<mfrac><mrow><mn>${num}</mn></mrow><mrow><mn>${den}</mn></mrow></mfrac></math>`;
+}
+function vmath(s) {
+  const src = String(s ?? '');
+  const re = /(\d+)\s+(\d+)\/(\d+)|(\d+)\/(\d+)/g;
+  let out = ''; let last = 0; let m;
+  while ((m = re.exec(src))) {
+    out += esc(src.slice(last, m.index));
+    if (m[1] !== undefined) out += vfrac(m[1], m[2], m[3]);
+    else out += vfrac(0, m[4], m[5]);
+    last = m.index + m[0].length;
+  }
+  out += esc(src.slice(last));
+  return out;
+}
+function variantQuality(it) {
+  const v = (state.variants[it.id] || [])[0];
+  if (!v) return { status: 'none', cls: 'bad', text: '無變化題' };
+  const ok = (v.quality || {}).status === 'ok' && v.status !== 'adjust';
+  if (v.status === 'adjust') return { status: 'bad', cls: 'bad', text: '變化題需調整' };
+  return ok ? { status: 'ok', cls: 'good', text: '變化題AI合格' } : { status: 'needs_review', cls: 'bad', text: '變化題未合格' };
+}
 
 function optionsOf(it) {
   if (it.type === 'true_false') return ['正確', '錯誤'];
@@ -332,19 +359,19 @@ function variantAppHtml(it) {
         let cls = ''; let dis = !quiz;
         if (quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; dis = true; }
         else if (!quiz && i === ci) cls = 'correct';
-        return `<button type="button" class="app-btn ${cls}" data-vopt="${i}" data-vkey="${esc(key)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${esc(o)}</span></button>`;
+        return `<button type="button" class="app-btn ${cls}" data-vopt="${i}" data-vkey="${esc(key)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${vmath(o)}</span></button>`;
       }).join('');
       body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${play.choice === ci ? '' : ' bad'}">${play.choice === ci ? '答對了！' : `答錯了，正解是 ${LETTERS[ci]}`}</p>` : ''}`;
-      if (!quiz) body += `<p class="app-correct">答案：${esc(String(p.answer || ''))}</p>`;
+      if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     } else {
       body = `<div class="app-fill1"><input class="app-input app-fill-input" data-vkey="${esc(key)}" value="${esc(play.fill || '')}" placeholder="輸入答案"><button type="button" class="app-check" data-vkey="${esc(key)}">檢查</button></div>`;
-      if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${esc(String(p.answer || ''))}）`}</p>`;
-      if (!quiz) body += `<p class="app-correct">答案：${esc(String(p.answer || ''))}</p>`;
+      if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${vmath(String(p.answer || ''))}）`}</p>`;
+      if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     }
     const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${esc(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
     const why = v.rationale ? `<p class="app-hint">變化理由：${esc(v.rationale)}</p>` : '';
     const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (p.figureNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
-    inner = `<div class="app-prompt">${esc(p.prompt || '')}</div>${fig}${body}${qual}${why}`;
+    inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}${why}`;
     const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
     review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
@@ -392,10 +419,10 @@ function revisionHtml(it) {
   const revs = state.revisions[it.id] || [];
   const list = revs.map((r) => {
     const st = r.status === 'approved' ? '合格' : (r.status === 'superseded' ? '已被取代' : (r.status === 'adjust' ? '需調整' : '待複審'));
-    const opts = (r.payload.options || []).map((o, i) => `${LETTERS[i]}. ${esc(o)}`).join('<br>');
+    const opts = (r.payload.options || []).map((o, i) => `${LETTERS[i]}. ${vmath(o)}`).join('<br>');
     return `<div class="rev-item ${esc(r.status)}">
       <div class="rev-head">v${r.version} · ${st}${r.model ? ' · ' + esc(r.model) : ''}</div>
-      <div class="rev-body"><b>題目：</b>${esc(r.payload.prompt || '')}${opts ? '<br>' + opts : ''}${r.payload.answer ? '<br><b>答案：</b>' + esc(r.payload.answer) : ''}</div>
+      <div class="rev-body"><b>題目：</b>${vmath(r.payload.prompt || '')}${opts ? '<br>' + opts : ''}${r.payload.answer ? '<br><b>答案：</b>' + vmath(r.payload.answer) : ''}</div>
       ${r.rationale ? `<div class="rev-why">改寫理由：${esc(r.rationale)}</div>` : ''}
       ${r.reason ? `<div class="rev-why">需調整原因：${esc(r.reason)}</div>` : ''}
       ${(r.status === 'proposed' || r.status === 'adjust') ? `<div class="rev-actions">
@@ -487,6 +514,7 @@ function filtered() {
     else if (state.review && (reviewOf(it.id).status || '') !== state.review) return false;
     if (state.imageOnly && !it.hasFigure) return false;
     if (state.qualityOnly && (state.quality[it.id] || {}).status !== 'needs_review') return false;
+    if (state.varFilter) { const vq = variantQuality(it).status; if (state.varFilter === 'ok' && vq !== 'ok') return false; if (state.varFilter === 'needs_review' && vq === 'ok') return false; }
     if (q && !(`${it.prompt || ''} ${it.id} ${it.lesson || ''}`.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -529,6 +557,7 @@ function render() {
         <span class="badge diff">難度 ${esc(it.difficulty ?? '')}</span>
         ${((state.quality[it.id] || {}).status === 'needs_review') ? `<span class="badge qbad" title="${esc(((state.quality[it.id] || {}).reasons || []).join(', '))}">品質需檢查</span>` : ''}
         ${state.explanationQueue[it.id] ? '<span class="badge qbad" title="AI 解題已重生成，需重審">AI需重審</span>' : ''}
+        <span class="badge ${variantQuality(it).cls}">${variantQuality(it).text}</span>
         ${assignHtml(it.id)}
         <span class="badge rv rv-${esc(rev.status || 'none')}">${REVIEW_LABELS[rev.status || '']}</span>
       </div>
@@ -1229,6 +1258,7 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
     el.fReview.addEventListener('change', (e) => { state.review = e.target.value; state.limit = 100; render(); });
     el.fImage.addEventListener('change', (e) => { state.imageOnly = e.target.checked; state.limit = 100; render(); });
     el.fQuality.addEventListener('change', (e) => { state.qualityOnly = e.target.checked; state.limit = 100; render(); });
+  if (el.fVarQuality) el.fVarQuality.addEventListener('change', (e) => { state.varFilter = e.target.value; state.limit = 100; render(); });
     document.querySelectorAll('.mode-switch .mode-btn').forEach((btn) => btn.addEventListener('click', () => {
       state.appMode = btn.dataset.mode;
       document.querySelectorAll('.mode-switch .mode-btn').forEach((x) => x.classList.toggle('on', x === btn));
