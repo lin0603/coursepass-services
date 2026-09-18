@@ -116,6 +116,35 @@ export async function regenerateExplanation(input = {}) {
 }
 
 
+// ---- 自我驗算：獨立解一次變化題，與產生的答案比對 ----
+const VERIFY_SYSTEM = [
+  '你是台灣國小數學老師。請「獨立」解出下面這道題，不要假設或沿用任何提示的答案。',
+  '若為選擇題，answer 請直接給出你認為正確的那個選項的完整文字（不要只給 A/B/C/D，除非選項本身就是字母）。',
+  '只輸出 JSON：{"answer":"...","reason":"一句話說明"}。',
+].join('\n');
+
+export async function verifyVariant(input = {}) {
+  if (!config.geminiApiKey) throw new Error('gemini key not configured (set GEMINI_API_KEY)');
+  const lines = [`題目：${input.prompt || ''}`];
+  if (Array.isArray(input.options) && input.options.length) {
+    lines.push(`選項：${input.options.map((o, i) => `${'ABCDEFGH'[i] || i + 1}. ${o}`).join(' / ')}`);
+  }
+  if (input.type) lines.push(`題型：${input.type}`);
+  const body = {
+    systemInstruction: { parts: [{ text: VERIFY_SYSTEM }] },
+    contents: [{ role: 'user', parts: [{ text: lines.join('\n') }] }],
+    generationConfig: { temperature: 0, maxOutputTokens: 600, responseMimeType: 'application/json' },
+  };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
+  let parsed = {};
+  try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { answer: text }; }
+  return { model: config.geminiModel, answer: String(parsed.answer || '').trim(), reason: String(parsed.reason || '').trim() };
+}
+
 // ---- 變化題產生（同考點、不同樣貌；保留原題）----
 const VARIANT_SYSTEM = [
   '你是台灣國小數學教材編輯。請參考「原題」的題型與設計目的，產生 1 道「變化題」。',

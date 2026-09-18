@@ -8,7 +8,7 @@ import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
-import { explainQuestion, generateVariant, regenerateExplanation, rewriteQuestion } from './explain.mjs';
+import { explainQuestion, generateVariant, regenerateExplanation, rewriteQuestion, verifyVariant } from './explain.mjs';
 import { renderFigureSvg } from './figures.mjs';
 import { store } from './db.mjs';
 
@@ -271,6 +271,41 @@ const variantSchema = z.object({
   hasFigure: z.boolean().optional(),
   courseId: z.string().max(64).optional(),
 });
+function stripLabel(x) {
+  return String(x || '')
+    .replace(/^\s*\(([A-Ha-h]|[1-8])\)\s*/, '')
+    .replace(/^\s*([A-Ha-h]|[1-8])[.、:：](?![0-9])\s*/, '')
+    .trim();
+}
+function numVal(x) {
+  let t = stripLabel(x).replace(/[０-９．／－]/g, (c) => '0123456789./-'['０１２３４５６７８９．／－'.indexOf(c)] || c);
+  t = t.replace(/[^0-9./\-\s]/g, '').trim();
+  let m = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (m) return Number(m[1]) + Number(m[2]) / Number(m[3]);
+  m = t.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (m) return Number(m[1]) / Number(m[2]);
+  m = t.match(/^-?\d+(\.\d+)?$/);
+  if (m) return Number(m[0]);
+  return null;
+}
+const OPT_L = 'ABCDEFGH';
+function answerIndex(ans, opts) {
+  const a = String(ans || '').trim();
+  const L = a.match(/^\(?([A-Ha-h])\)?[.、]?$/);
+  if (L) { const i = OPT_L.indexOf(L[1].toUpperCase()); if (i >= 0 && i < opts.length) return i; }
+  const N = a.match(/^\(?([1-8])\)?[.、]?$/);
+  if (N && Number(N[1]) - 1 < opts.length) return Number(N[1]) - 1;
+  let m = a.match(/^\(([1-8])\)\s*(.+)$/) || a.match(/^([1-8])[.、)]\s+(.+)$/);
+  if (m) { const i = Number(m[1]) - 1; if (i >= 0 && i < opts.length) return i; }
+  m = a.match(/^([A-Ha-h])[.、)]\s*(.+)$/);
+  if (m) { const i = OPT_L.indexOf(m[1].toUpperCase()); if (i >= 0 && i < opts.length) return i; }
+  const norm = (z) => String(z || '').replace(/\s+/g, '').replace(/[.。、,，]$/, '');
+  const direct = opts.findIndex((o) => norm(o) === norm(a));
+  if (direct >= 0) return direct;
+  const av = numVal(a);
+  if (av !== null) { const i = opts.findIndex((o) => { const v = numVal(o); return v !== null && Math.abs(v - av) < 1e-9; }); if (i >= 0) return i; }
+  return -1;
+}
 function checkVariant(v, originalPrompt) {
   const reasons = [];
   const opts = Array.isArray(v.options) ? v.options.map((x) => String(x)).filter(Boolean) : [];
@@ -279,17 +314,32 @@ function checkVariant(v, originalPrompt) {
   if (v.type === 'choice') {
     if (opts.length < 2) reasons.push('too_few_options');
     if (new Set(opts).size !== opts.length) reasons.push('dup_options');
-    const ans = String(v.answer || '').trim();
-    const L = 'ABCDEFGH';
-    const lm = ans.match(/^\(?([A-Ha-h])\)?[.、]?$/);
-    const nm = ans.match(/^\(?([1-8])\)?[.、]?$/);
-    const ok = opts.includes(ans)
-      || (lm && L.indexOf(lm[1].toUpperCase()) >= 0 && L.indexOf(lm[1].toUpperCase()) < opts.length)
-      || (nm && Number(nm[1]) - 1 < opts.length);
-    if (!ok) reasons.push('answer_not_in_options');
+    const oddOneOut = /不一樣大|不相等|不同|不正確|錯誤|不是|最簡/.test(String(v.prompt || ''));
+    const vals = opts.map(numVal);
+    if (!oddOneOut && vals.every((x) => x !== null)) {
+      for (let i = 0; i < vals.length; i += 1) for (let j = i + 1; j < vals.length; j += 1) {
+        if (Math.abs(vals[i] - vals[j]) < 1e-9) { reasons.push('equal_options'); i = vals.length; break; }
+      }
+    }
+    const idx = answerIndex(v.answer, opts);
+    if (idx < 0) reasons.push('answer_not_in_options');
+    else if (!oddOneOut && vals.every((x) => x !== null) && vals[idx] !== null) {
+      const hits = vals.filter((x) => Math.abs(x - vals[idx]) < 1e-9).length;
+      if (hits > 1) reasons.push('multiple_correct');
+    }
   }
   if (originalPrompt && v.prompt && String(v.prompt).replace(/\s+/g, '') === String(originalPrompt).replace(/\s+/g, '')) reasons.push('identical_to_source');
-  return reasons;
+  return [...new Set(reasons)];
+}
+function sameAnswer(a, b, opts) {
+  if (!a || !b) return false;
+  const ia = answerIndex(a, opts);
+  const ib = answerIndex(b, opts);
+  if (ia >= 0 && ib >= 0) return ia === ib;
+  const norm = (z) => String(z || '').replace(/\s+/g, '').replace(/[（(][1-8A-Ha-h][）)]/g, '').replace(/[.。、,，]$/, '');
+  if (norm(a) === norm(b)) return true;
+  const va = numVal(a); const vb = numVal(b);
+  return va !== null && vb !== null && Math.abs(va - vb) < 1e-9;
 }
 app.get('/v1/variants', (req, res) => res.json({ items: store.listVariants({ sourceQuestionId: req.query.question }) }));
 app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
@@ -300,7 +350,15 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
   if (payload.figure) { const svg = renderFigureSvg(payload.figure); if (svg) payload.figureSvg = svg; }
   const reasons = checkVariant(payload, parsed.data.prompt);
   if (parsed.data.hasFigure && !payload.figureSvg) reasons.push('figure_missing');
-  const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons };
+  let verify = null;
+  if (payload.prompt && !reasons.length) {
+    try {
+      const vr = await verifyVariant({ prompt: payload.prompt, options: payload.options, type: payload.type });
+      verify = { answer: vr.answer, reason: vr.reason, model: vr.model };
+      if (!sameAnswer(payload.answer, vr.answer, payload.options || [])) reasons.push('self_verify_mismatch');
+    } catch (e) { console.error('verify failed', req.params.id, e.message); }
+  }
+  const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons, verify };
   const row = store.addVariant({ sourceQuestionId: req.params.id, nodeId: parsed.data.node, courseId: parsed.data.courseId, payload, rationale: payload.rationale, model: out.model, quality });
   res.status(201).json(row);
 }));
