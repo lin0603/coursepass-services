@@ -16,6 +16,12 @@ config.llmVariantsUrl = process.env.LLM_VARIANTS_URL || `${config.filesBase}/pre
 config.geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY || '';
 config.geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
+// 獨立驗算模型（OpenAI 相容；預設 DeepSeek flash-lite）。未設 key＝回退 Gemini。
+config.verifyBaseUrl = (process.env.VERIFY_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '');
+config.verifyApiKey = process.env.VERIFY_API_KEY || '';
+config.verifyModel = process.env.VERIFY_MODEL || 'deepseek-flash';
+config.verifyProvider = process.env.VERIFY_PROVIDER || 'openai';
+
 // 審題站簡易登入（通行碼）；未設＝不啟用
 config.previewPasscode = process.env.PREVIEW_PASSCODE || '';
 // 管理者密碼（可看資源索引／來源資源包）；未設＝沿用通行碼

@@ -94,3 +94,8 @@
 
 - 修正：數值判斷改為「整串皆為數值（可帶單位）」才算，避免敘述型選項被誤判等值。
 - `以上皆是／皆正確` 類型選項不觸發 `self_verify_multiple`。
+
+### 驗算模型（獨立於產生模型）
+- 驗算改用 **OpenAI 相容 API**（預設 **DeepSeek `deepseek-flash`**），避免與產生模型（Gemini）犯同樣的錯。
+- 環境變數：`VERIFY_PROVIDER=openai`、`VERIFY_BASE_URL`、`VERIFY_MODEL`、`VERIFY_API_KEY`；未設 key 時回退 Gemini。
+- DeepSeek 驗算能列出「所有符合條件的選項」，對條件題雙解更敏感。

@@ -136,15 +136,36 @@ export async function verifyVariant(input = {}) {
     contents: [{ role: 'user', parts: [{ text: lines.join('\n') }] }],
     generationConfig: { temperature: 0, maxOutputTokens: 600, responseMimeType: 'application/json' },
   };
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
-  if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const data = await res.json();
-  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
+  let text = '';
+  let model = config.geminiModel;
+  if (config.verifyProvider === 'openai' && config.verifyApiKey) {
+    model = config.verifyModel;
+    const res = await fetch(`${config.verifyBaseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.verifyApiKey}` },
+      body: JSON.stringify({
+        model: config.verifyModel,
+        messages: [{ role: 'system', content: VERIFY_SYSTEM }, { role: 'user', content: lines.join('\n') }],
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        max_tokens: 800,
+      }),
+      signal: AbortSignal.timeout(90000),
+    });
+    if (!res.ok) throw new Error(`verify ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const data = await res.json();
+    text = String(data.choices?.[0]?.message?.content || '').trim();
+  } else {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+    if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const data = await res.json();
+    text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
+  }
   let parsed = {};
   try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { answer: text }; }
   const all = Array.isArray(parsed.all_correct) ? parsed.all_correct.map((x) => String(x).trim()).filter(Boolean) : [];
-  return { model: config.geminiModel, answer: String(parsed.answer || '').trim(), allCorrect: all, reason: String(parsed.reason || '').trim() };
+  return { model, answer: String(parsed.answer || '').trim(), allCorrect: all, reason: String(parsed.reason || '').trim() };
 }
 
 // ---- 變化題產生（同考點、不同樣貌；保留原題）----
