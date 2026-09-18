@@ -114,3 +114,39 @@ export async function regenerateExplanation(input = {}) {
   const explanation = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
   return { model: config.geminiModel, explanation };
 }
+
+
+// ---- 變化題產生（同考點、不同樣貌；保留原題）----
+const VARIANT_SYSTEM = [
+  '你是台灣國小數學教材編輯。請參考「原題」的題型與設計目的，產生 1 道「變化題」。',
+  '必須：同知識節點與同考點、同題型、難度相近（±1）、年級適齡、台灣小學用語、繁體中文。',
+  '答案必須唯一且正確（請自行驗算）。不要逐字重製原題；不可改變考點。',
+  '至少改變 2 個維度：數值/單位、情境、問法、選項與干擾項、呈現形式、順序。',
+  '只輸出 JSON：{"prompt":"...","options":["..."],"answer":"...","type":"choice|fill_blank","rationale":"為什麼這樣變（一句話）","figureNote":"若原題含圖，說明圖要怎麼處理"}。',
+].join('\n');
+
+export async function generateVariant(input = {}) {
+  if (!config.geminiApiKey) throw new Error('gemini key not configured (set GEMINI_API_KEY)');
+  const user = [
+    `原題內容：${input.prompt || ''}`,
+    Array.isArray(input.options) && input.options.length ? `原題選項：${input.options.map((o, i) => `${'ABCDEFGH'[i] || i + 1}. ${o}`).join(' / ')}` : '',
+    input.answer ? `原題答案：${input.answer}` : '',
+    input.type ? `題型：${input.type}` : '',
+    input.node ? `知識節點：${input.node}${input.nodeName ? ' ' + input.nodeName : ''}` : '',
+    input.difficulty ? `難度：${input.difficulty}` : '',
+    input.hasFigure ? '原題含圖（請在 figureNote 說明圖的處理方式；若無法只靠文字出題，請仍給出文字版並註明）' : '',
+  ].filter(Boolean).join('\n');
+  const body = {
+    systemInstruction: { parts: [{ text: VARIANT_SYSTEM }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { temperature: 0.6, maxOutputTokens: 1200, responseMimeType: 'application/json' },
+  };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('').trim();
+  let parsed = {};
+  try { parsed = JSON.parse(text); } catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { prompt: text, options: [], answer: '', type: 'fill_blank', rationale: '' }; }
+  return { model: config.geminiModel, variant: parsed };
+}

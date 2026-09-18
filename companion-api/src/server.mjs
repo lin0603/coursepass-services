@@ -8,7 +8,7 @@ import { buildActivitySet } from './mixer.mjs';
 import { groupByTopic, spreadNodes } from './path.mjs';
 import { buildNotes, buildReport } from './report.mjs';
 import { getLlmVariants } from './llmVariants.mjs';
-import { explainQuestion, regenerateExplanation, rewriteQuestion } from './explain.mjs';
+import { explainQuestion, generateVariant, regenerateExplanation, rewriteQuestion } from './explain.mjs';
 import { store } from './db.mjs';
 
 const app = express();
@@ -257,6 +257,50 @@ const rewriteSchema = z.object({
   courseId: z.string().max(64).optional(),
 });
 app.get('/v1/rewrites', (req, res) => res.json({ items: store.listRevisions({ sourceQuestionId: req.query.question }) }));
+
+// ---- 變化題（同考點、不同樣貌；原題保留）----
+const variantSchema = z.object({
+  prompt: z.string().max(4000).optional(),
+  options: z.array(z.string().max(500)).max(8).optional(),
+  answer: z.string().max(2000).optional(),
+  type: z.string().max(64).optional(),
+  node: z.string().max(64).optional(),
+  nodeName: z.string().max(120).optional(),
+  difficulty: z.union([z.string(), z.number()]).optional(),
+  hasFigure: z.boolean().optional(),
+  courseId: z.string().max(64).optional(),
+});
+function checkVariant(v, originalPrompt) {
+  const reasons = [];
+  const opts = Array.isArray(v.options) ? v.options.map((x) => String(x)).filter(Boolean) : [];
+  if (!v.prompt) reasons.push('no_prompt');
+  if (!v.answer) reasons.push('no_answer');
+  if (v.type === 'choice') {
+    if (opts.length < 2) reasons.push('too_few_options');
+    if (new Set(opts).size !== opts.length) reasons.push('dup_options');
+    const ans = String(v.answer || '');
+    const ok = opts.includes(ans) || /^[A-Ha-h]$/.test(ans) || /^[1-8]$/.test(ans);
+    if (!ok) reasons.push('answer_not_in_options');
+  }
+  if (originalPrompt && v.prompt && String(v.prompt).replace(/\s+/g, '') === String(originalPrompt).replace(/\s+/g, '')) reasons.push('identical_to_source');
+  return reasons;
+}
+app.get('/v1/variants', (req, res) => res.json({ items: store.listVariants({ sourceQuestionId: req.query.question }) }));
+app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
+  const parsed = variantSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });
+  const out = await generateVariant(parsed.data);
+  const reasons = checkVariant(out.variant, parsed.data.prompt);
+  const quality = { status: reasons.length ? 'needs_review' : 'ok', reasons };
+  const row = store.addVariant({ sourceQuestionId: req.params.id, nodeId: parsed.data.node, courseId: parsed.data.courseId, payload: out.variant, rationale: out.variant.rationale, model: out.model, quality });
+  res.status(201).json(row);
+}));
+app.post('/v1/variants/:id/review', (req, res) => {
+  const b = req.body || {};
+  const version = Number(b.version);
+  if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
+  res.json({ items: store.reviewVariant({ sourceQuestionId: req.params.id, version, status: b.status === 'approved' ? 'approved' : 'adjust', reason: b.reason }) });
+});
 app.post('/v1/rewrites/:id', asyncHandler(async (req, res) => {
   const parsed = rewriteSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });

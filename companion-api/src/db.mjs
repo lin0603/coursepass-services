@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS question_revisions (
   payload TEXT, rationale TEXT, model TEXT, status TEXT DEFAULT 'proposed', createdAt TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_rev_q ON question_revisions(sourceQuestionId);
+CREATE TABLE IF NOT EXISTS variants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, sourceQuestionId TEXT, nodeId TEXT, courseId TEXT,
+  version INTEGER, payload TEXT, rationale TEXT, model TEXT, status TEXT DEFAULT 'proposed',
+  reason TEXT, quality TEXT, createdAt TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_var_q ON variants(sourceQuestionId);
 CREATE INDEX IF NOT EXISTS ix_answers_learner ON answers(learnerId, createdAt);
 CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWrongAt);
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
@@ -308,6 +314,27 @@ export const store = {
                              VALUES (?,?,?,?,?,?, 'proposed', ?)`)
       .run(sourceQuestionId, courseId || null, version, JSON.stringify(payload || {}), rationale || '', model || null, now2);
     return { id: info.lastInsertRowid, sourceQuestionId, courseId: courseId || null, version, payload, rationale, model, status: 'proposed', createdAt: now2 };
+  },
+  addVariant({ sourceQuestionId, nodeId, courseId, payload, rationale, model, quality }) {
+    const prev = db.prepare('SELECT MAX(version) m FROM variants WHERE sourceQuestionId=?').get(sourceQuestionId).m || 0;
+    const version = prev + 1;
+    const now2 = now();
+    const info = db.prepare(`INSERT INTO variants (sourceQuestionId,nodeId,courseId,version,payload,rationale,model,status,quality,createdAt)
+                             VALUES (?,?,?,?,?,?,?, 'proposed', ?, ?)`)
+      .run(sourceQuestionId, nodeId || null, courseId || null, version, JSON.stringify(payload || {}), rationale || '', model || null, JSON.stringify(quality || {}), now2);
+    return { id: info.lastInsertRowid, sourceQuestionId, version, nodeId: nodeId || null, courseId: courseId || null, payload, rationale, model, status: 'proposed', quality: quality || {}, createdAt: now2 };
+  },
+  listVariants({ sourceQuestionId } = {}) {
+    const where = sourceQuestionId ? 'WHERE sourceQuestionId=?' : '';
+    const params = sourceQuestionId ? [sourceQuestionId] : [];
+    return db.prepare(`SELECT id, sourceQuestionId, nodeId, courseId, version, payload, rationale, model, status, reason, quality, createdAt
+                       FROM variants ${where} ORDER BY sourceQuestionId, version DESC`)
+      .all(...params).map((r) => ({ ...r, payload: JSON.parse(r.payload || '{}'), quality: JSON.parse(r.quality || '{}') }));
+  },
+  reviewVariant({ sourceQuestionId, version, status, reason }) {
+    db.prepare('UPDATE variants SET status=?, reason=? WHERE sourceQuestionId=? AND version=?').run(status, reason || '', sourceQuestionId, version);
+    if (status === 'approved') db.prepare("UPDATE variants SET status='superseded' WHERE sourceQuestionId=? AND version<>?").run(sourceQuestionId, version);
+    return this.listVariants({ sourceQuestionId });
   },
   listRevisions({ sourceQuestionId } = {}) {
     const where = sourceQuestionId ? 'WHERE sourceQuestionId=?' : '';

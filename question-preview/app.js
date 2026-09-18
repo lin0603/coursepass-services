@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -309,6 +309,48 @@ function fillHtml(it, a, quiz) {
   return `<div class="app-fill1"><input class="app-input app-fill-input" data-qid="${esc(it.id)}" value="${esc(val)}" placeholder="輸入答案"><button type="button" class="app-check" data-qid="${esc(it.id)}">檢查</button></div>${fb}`;
 }
 
+// 變化題（App 呈現；並列原題，原題保留）
+function variantKey(id, ver) { return `${id}#v${ver}`; }
+function variantAppHtml(it) {
+  const vs = state.variants[it.id] || [];
+  const v = vs[0];
+  const quiz = state.appMode !== 'answer';
+  const label = v ? `v${v.version} · ${esc(v.payload.type || '')}` : '尚未產生';
+  const head = `<div class="app-head">變化題（App 呈現） <span class="app-label">${label}</span></div>`;
+  const btn = `<div class="ai-actions"><button type="button" class="ai-gen var-gen">${v ? '重新產生變化題' : '產生變化題'}</button><span class="ai-state var-state">${v && (v.quality || {}).status === 'needs_review' ? '品質需檢查' : ''}</span></div>`;
+  let inner = '<div class="app-prompt"><span class="app-none">尚未產生變化題</span></div>';
+  let review = '';
+  if (v) {
+    const p = v.payload || {};
+    const key = variantKey(it.id, v.version);
+    const play = state.play[key] || {};
+    let body = '';
+    if (p.type === 'choice' && Array.isArray(p.options) && p.options.length) {
+      const ci = correctIndex(p.answer, p.options.length);
+      const answered = play.choice != null;
+      const opts = p.options.map((o, i) => {
+        let cls = ''; let dis = !quiz;
+        if (quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; dis = true; }
+        else if (!quiz && i === ci) cls = 'correct';
+        return `<button type="button" class="app-btn ${cls}" data-vopt="${i}" data-vkey="${esc(key)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${esc(o)}</span></button>`;
+      }).join('');
+      body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${play.choice === ci ? '' : ' bad'}">${play.choice === ci ? '答對了！' : `答錯了，正解是 ${LETTERS[ci]}`}</p>` : ''}`;
+      if (!quiz) body += `<p class="app-correct">答案：${esc(String(p.answer || ''))}</p>`;
+    } else {
+      body = `<div class="app-fill1"><input class="app-input app-fill-input" data-vkey="${esc(key)}" value="${esc(play.fill || '')}" placeholder="輸入答案"><button type="button" class="app-check" data-vkey="${esc(key)}">檢查</button></div>`;
+      if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${esc(String(p.answer || ''))}）`}</p>`;
+      if (!quiz) body += `<p class="app-correct">答案：${esc(String(p.answer || ''))}</p>`;
+    }
+    const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${esc(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
+    const why = v.rationale ? `<p class="app-hint">變化理由：${esc(v.rationale)}</p>` : '';
+    inner = `<div class="app-prompt">${esc(p.prompt || '')}</div>${body}${qual}${why}`;
+    const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
+    review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
+      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
+  }
+  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div>${review}</section>`;
+}
+
 // App 實際呈現（手機畫面模擬；來自 companion-api 活動格式）
 function appViewHtml(it) {
   const a = state.appdata[it.id];
@@ -500,7 +542,10 @@ function render() {
           </div>
         </div>
         <div class="col-right">
-          ${appViewHtml(it)}
+          <div class="app-pair">
+            ${appViewHtml(it)}
+            ${variantAppHtml(it)}
+          </div>
           ${reviewHtml(it)}
         </div>
         <div class="col-ai">
@@ -611,6 +656,66 @@ el.list.addEventListener('click', async (event) => {
       play.selected = null;
     }
     state.matchingPlay[id] = play;
+    render();
+    return;
+  }
+  const varGen = event.target.closest('.var-gen');
+  if (varGen) {
+    const section = varGen.closest('.app-variant');
+    const id = section.dataset.id;
+    const item = state.items.find((i) => i.id === id);
+    const a = state.appdata[id] || {};
+    const st = section.querySelector('.var-state');
+    st.textContent = '產生中…'; varGen.disabled = true;
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ prompt: stripHtml(item.prompt), options: optionsOf(item), answer: deFull(item.answer), type: a.type || item.type, node: item.node, nodeName: item.nodeName, difficulty: item.difficulty, hasFigure: !!item.hasFigure, courseId: state.courseId || undefined }),
+      });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || res.status);
+      (state.variants[id] = state.variants[id] || []).unshift(r);
+      st.textContent = `已產生 v${r.version}`;
+      render();
+    } catch (e) { st.textContent = '失敗：' + e.message; varGen.disabled = false; }
+    return;
+  }
+  const varOk = event.target.closest('.var-ok');
+  const varAdjust = event.target.closest('.var-adjust');
+  if (varOk || varAdjust) {
+    const section = (varOk || varAdjust).closest('.app-variant');
+    const id = section.dataset.id;
+    const v = (state.variants[id] || [])[0];
+    if (!v) return;
+    const reason = section.querySelector('.var-reason') ? section.querySelector('.var-reason').value : '';
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ version: v.version, status: varOk ? 'approved' : 'adjust', reason }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || res.status);
+      state.variants[id] = d.items || [];
+      render();
+    } catch (e) { alert('儲存失敗：' + e.message); }
+    return;
+  }
+  const vOpt = event.target.closest('.app-btn[data-vopt]');
+  if (vOpt) {
+    if (state.appMode === 'answer') return;
+    const key = vOpt.dataset.vkey;
+    state.play[key] = { ...(state.play[key] || {}), choice: Number(vOpt.dataset.vopt) };
+    render();
+    return;
+  }
+  const vCheck = event.target.closest('.app-check[data-vkey]');
+  if (vCheck) {
+    const key = vCheck.dataset.vkey;
+    const id = key.split('#')[0];
+    const v = (state.variants[id] || [])[0];
+    const val = normalizeAnswer((state.play[key] || {}).fill || '');
+    const ok = v && normalizeAnswer(v.payload && v.payload.answer) === val;
+    state.play[key] = { ...(state.play[key] || {}), fillChecked: true, fillOk: !!ok };
     render();
     return;
   }
@@ -844,6 +949,8 @@ el.list.addEventListener('click', async (event) => {
 });
 
 el.list.addEventListener('input', (event) => {
+  const vinp = event.target.closest('.app-fill-input[data-vkey]');
+  if (vinp) { state.play[vinp.dataset.vkey] = { fill: vinp.value }; return; }
   const inp = event.target.closest('.app-fill-input');
   if (!inp) return;
   const qid = inp.dataset.qid;
@@ -1075,7 +1182,7 @@ function renderCourseSelector(courses, course) {
 
 async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUALITY_URL) {
   try {
-    const [d, app, match, rev, expl, explApi, rvs, asg, qual, rews, explQ] = await Promise.all([
+    const [d, app, match, rev, expl, explApi, rvs, asg, qual, rews, explQ, vars] = await Promise.all([
       fetch(DATA_URL).then((r) => r.json()),
       fetch(APP_DATA_URL).then((r) => r.json()).catch(() => ({ items: {} })),
       fetch(MATCHING_URL).then((r) => r.json()).catch(() => ({ items: {} })),
@@ -1087,6 +1194,7 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
       QUALITY_URL ? fetch(QUALITY_URL).then((r) => r.json()).catch(() => ({ items: {} })) : Promise.resolve({ items: {} }),
       fetch(`${REVIEWS_API}/v1/rewrites`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
       fetch(`${REVIEWS_API}/v1/explanations/queue`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+      fetch(`${REVIEWS_API}/v1/variants`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
     ]);
     state.items = d.items;
     state.appdata = app.items || {};
@@ -1097,6 +1205,8 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
     for (const rv of (rews.items || [])) (state.revisions[rv.sourceQuestionId] = state.revisions[rv.sourceQuestionId] || []).push(rv);
     state.explanationQueue = {};
     for (const q of (explQ.items || [])) state.explanationQueue[q.sourceQuestionId] = q;
+    state.variants = {};
+    for (const v of (vars.items || [])) (state.variants[v.sourceQuestionId] = state.variants[v.sourceQuestionId] || []).push(v);
     state.qreviews = {};
     for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
     state.reviewers = rvs.items || [];

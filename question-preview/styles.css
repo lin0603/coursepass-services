@@ -233,3 +233,8 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .fig-zoom { position: fixed; inset: 0; z-index: 70; background: rgba(8, 11, 16, .94); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
 .fig-zoom[hidden] { display: none; }
 .fig-zoom img { max-width: 96vw; max-height: 92vh; width: auto; height: auto; object-fit: contain; background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+
+/* 原題 / 變化題 並列 */
+.app-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 1500px) { .app-pair { grid-template-columns: 1fr; } }
+.app-variant .app-phone { border-left: 3px solid #7c3aed; }
