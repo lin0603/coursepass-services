@@ -446,6 +446,11 @@ app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
   res.json({ processed: picks.length, queuedAdjust: adjust.length, queuedFlagged: flagged.length, queuedLegacy: legacy.length, queuedNew: fresh.length, ok, needs_review: nr, failed, ids: picks });
 }));
 
+app.post('/v1/variants/:id/drop', (req, res) => {
+  const version = Number((req.body || {}).version);
+  if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
+  res.json({ dropped: store.deleteVariantVersion(req.params.id, version), items: store.listVariants({ sourceQuestionId: req.params.id }) });
+});
 app.delete('/v1/variants/:id', (req, res) => {
   res.json({ deleted: store.deleteVariants(req.params.id) });
 });
@@ -481,6 +486,11 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     const k = `${s2.chapter}\u0000${s2.difficulty}`; counts.set(k, (counts.get(k) || 0) + 1);
   }
   // 已貢獻的來源題（最新版本 ok/approved）→ 避免重複產生（同題新版本不會增加覆蓋）
+  const occupied = new Set();
+  for (const [qid, v] of Object.entries(latest)) {
+    const ok = (v.quality || {}).status === 'ok' || v.status === 'approved' || v.status === 'adjust';
+    if (ok) occupied.add(qid);
+  }
   const contrib = new Map(); // sourceId -> Set(cellKey)
   for (const [qid, v] of Object.entries(latest)) {
     const s2 = byId.get(qid); if (!s2 || !s2.chapter || !s2.difficulty || s2.hasFigure) continue;
@@ -512,19 +522,19 @@ app.post('/v1/variants/fill-gaps', asyncHandler(async (req, res) => {
     const k = `${l}\u0000${d}`;
     const have = counts.get(k) || 0; const need = target - have;
     if (need <= 0) continue;
-    let pool = (exact.get(k) || []).filter((x) => !contrib.has(x.id));
+    let pool = (exact.get(k) || []).filter((x) => !occupied.has(x.id));
     let same = true;
     if (pool.length < need) {
       same = false;
       const seenIds = new Set(pool.map((x) => x.id));
-      const extraL = (byLesson.get(l) || []).filter((x) => !contrib.has(x.id) && !seenIds.has(x.id));
+      const extraL = (byLesson.get(l) || []).filter((x) => !occupied.has(x.id) && !seenIds.has(x.id));
       extraL.forEach((x) => seenIds.add(x.id));
       pool = pool.concat(extraL);
       if (pool.length < need) {
         const node = (exact.get(k) || [])[0] ? (exact.get(k) || [])[0].node : null;
         const nodeQ = node || (items.find((x) => x.chapter === l) || {}).node;
         if (nodeQ) {
-          const extraN = (byNode.get(nodeQ) || []).filter((x) => !contrib.has(x.id) && !seenIds.has(x.id));
+          const extraN = (byNode.get(nodeQ) || []).filter((x) => !occupied.has(x.id) && !seenIds.has(x.id));
           pool = pool.concat(extraN);
         }
       }
