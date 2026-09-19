@@ -35,6 +35,8 @@ config.coursesUrl = process.env.COURSES_URL || `${config.filesBase}/preview/cour
 // 每日批次：預設課程與每次題數
 config.batchCourseId = process.env.BATCH_COURSE_ID || 'knsh-g5-math-115a';
 config.batchLimit = Number(process.env.BATCH_LIMIT || 100);
+// 自動指派：預設只派給這幾位老師（雅玲／蓁菓／soso）
+config.assignReviewers = (process.env.ASSIGN_REVIEWERS || 'r_mu5a8ddkq90b,r_mu5a8dveklbj,r_mu59gcnb1agn').split(',').map((x) => x.trim()).filter(Boolean);
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 export const dbPath = path.join(config.dataDir, 'companion.sqlite');

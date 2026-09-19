@@ -953,6 +953,7 @@ const planStageSchema = z.object({
 // ---- 自動階段指派：第1階段廣度覆蓋（每人待審上限）、第2階段雙審（前一輪完成後）----
 const autoAssignSchema = z.object({
   perReviewer: z.number().int().min(1).max(500).optional(),
+  reviewers: z.array(z.string()).min(1).optional(),
   by: z.enum(['node', 'lesson']).optional(),
   courseId: z.string().max(64).optional(),
   dryRun: z.boolean().optional(),
@@ -962,7 +963,8 @@ app.post('/v1/assignments/auto', asyncHandler(async (req, res) => {
   const cap = b.perReviewer || 100;
   const by = b.by || 'node';
   const courseId = b.courseId || config.batchCourseId;
-  const reviewers = store.listReviewers().filter((r) => r.active !== 0).map((r) => r.id);
+  const reviewers = Array.isArray(b.reviewers) && b.reviewers.length ? b.reviewers.map(String)
+    : (config.assignReviewers && config.assignReviewers.length ? config.assignReviewers : store.listReviewers().filter((r) => r.active !== 0).map((r) => r.id));
   if (!reviewers.length) return res.json({ reviewers: 0, stage1: 0, stage2: 0 });
   const latest = {};
   for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
