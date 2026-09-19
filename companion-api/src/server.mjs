@@ -940,6 +940,63 @@ app.post('/v1/assignments/add', (req, res) => {
   const created = store.createAssignments(rows, batchId);
   res.status(201).json({ batchId, questions: ids.length, assignments: created });
 });
+// ---- 階段指派：先以知識點覆蓋為主（廣度優先），每人固定題數 ----
+const planStageSchema = z.object({
+  perReviewer: z.number().int().min(1).max(500).optional(),
+  reviewers: z.array(z.string()).min(1).optional(),
+  by: z.enum(['node', 'lesson']).optional(),
+  courseId: z.string().max(64).optional(),
+  double: z.boolean().optional(),
+  replace: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+app.post('/v1/assignments/plan-stage', asyncHandler(async (req, res) => {
+  const b = planStageSchema.safeParse(req.body || {}).data || {};
+  const per = b.perReviewer || 100;
+  const reviewers = b.reviewers && b.reviewers.length ? b.reviewers : ['r_mu5a8ddkq90b', 'r_mu5a8dveklbj', 'r_mu59gcnb1agn'];
+  const by = b.by || 'node';
+  const courseId = b.courseId || config.batchCourseId;
+  // 已合格的變化題（最新版本）
+  const latest = {};
+  for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+  const approvedIds = Object.entries(latest).filter(([, v]) => v.status === 'approved').map(([id]) => id).sort();
+  // 題目屬性（node / lesson）
+  const src = await fetch(config.explainDataUrl).then((r) => r.json()).catch(() => ({ items: [] }));
+  const byId = new Map((src.items || []).map((q) => [q.id, q]));
+  const groups = new Map();
+  for (const id of approvedIds) {
+    const q = byId.get(id) || {};
+    const key = (by === 'lesson' ? (q.chapter || '未分類') : (q.node || '未綁定')) || '未分類';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(id);
+  }
+  // 廣度優先：依群組大小由小到大輪替，讓少數知識點先被涵蓋
+  const ordered = [];
+  const keys = [...groups.keys()].sort((a, b2) => groups.get(a).length - groups.get(b2).length || a.localeCompare(b2));
+  let round = 0; let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const k of keys) {
+      const arr = groups.get(k);
+      if (round < arr.length) { ordered.push({ id: arr[round], group: k }); progressed = true; }
+    }
+    round += 1;
+  }
+  const total = per * reviewers.length;
+  const picks = ordered.slice(0, total);
+  const rows = [];
+  picks.forEach((p, i) => {
+    const r1 = reviewers[i % reviewers.length];
+    rows.push({ sourceQuestionId: p.id, reviewerId: r1, courseId });
+    if (b.double) rows.push({ sourceQuestionId: p.id, reviewerId: reviewers[(i + 1) % reviewers.length], courseId });
+  });
+  const coveredGroups = new Set(picks.map((p) => p.group)).size;
+  if (b.dryRun) return res.json({ dryRun: true, students: reviewers.length, perReviewer: per, questions: picks.length, coveredGroups, totalGroups: groups.size, rows: rows.length });
+  if (b.replace !== false) store.pruneAssignments({ reviewers });
+  const batchId = `b_${Date.now().toString(36)}`;
+  const created = store.createAssignments(rows, batchId);
+  res.status(201).json({ stage: 1, perReviewer: per, questions: picks.length, coveredGroups, totalGroups: groups.size, assignments: created });
+}));
 app.post('/v1/assignments/prune', (req, res) => {
   const b = req.body || {};
   const keep = Array.isArray(b.keep) ? b.keep.map(String) : [];
