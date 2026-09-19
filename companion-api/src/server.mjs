@@ -636,6 +636,7 @@ app.post('/v1/explanations/variants', asyncHandler(async (req, res) => {
   let list = Object.entries(latest).filter(([, v]) => (v.payload || {}).prompt);
   if (b.scope !== 'all') list = list.filter(([, v]) => v.status === 'approved');
   list.sort((a, b2) => a[0].localeCompare(b2[0]));
+  if (!b.force) list = list.filter(([id, v]) => !store.getExplanation(`${id}#v${v.version}`));
   const picks = list.slice(0, limit);
   let processed = 0; let skipped = 0; let failed = 0;
   const queue = [...picks];
