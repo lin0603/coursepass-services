@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, varFilter: '', courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, varFilter: '', variantReviewed: {}, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -421,9 +421,9 @@ function variantSideHtml(it) {
       <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
       <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
     </details>`;
-  const aiApproved = v.status === 'approved' && String(v.reason || '').startsWith('Gemini 批次複核');
-  const st = aiApproved ? '待確認（AI 判定合格）' : (v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審'));
-  const review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' && !aiApproved ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
+  const mineOk = !!(state.variantReviewed && state.variantReviewed[ekey]);
+  const st = v.status === 'approved' ? (mineOk ? '已合格' : '待確認') : (v.status === 'adjust' ? '需調整' : '待審');
+  const review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${mineOk ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">
       <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span></div>`;
   return `<section class="variant-side" data-id="${esc(it.id)}">
@@ -816,6 +816,7 @@ el.list.addEventListener('click', async (event) => {
     const v = (state.variants[id] || [])[0];
     if (!v) return;
     const reason = section.querySelector('.var-reason') ? section.querySelector('.var-reason').value : '';
+    if (varOk) { state.variantReviewed = state.variantReviewed || {}; state.variantReviewed[`${id}#v${v.version}`] = true; }
     try {
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/review`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
