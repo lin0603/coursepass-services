@@ -451,6 +451,38 @@ app.post('/v1/variants/:id/drop', (req, res) => {
   if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
   res.json({ dropped: store.deleteVariantVersion(req.params.id, version), items: store.listVariants({ sourceQuestionId: req.params.id }) });
 });
+// ---- 批次複核（Gemini）：對尚未複核的變化題重新驗算，正確→合格、有疑義→需調整 ----
+const autoReviewSchema = z.object({
+  limit: z.number().int().min(1).max(300).optional(),
+  apply: z.boolean().optional(),
+  concurrency: z.number().int().min(1).max(6).optional(),
+});
+app.post('/v1/variants/auto-review', asyncHandler(async (req, res) => {
+  const b = autoReviewSchema.safeParse(req.body || {}).data || {};
+  const limit = b.limit || 50;
+  const latest = {};
+  for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+  const pool = Object.entries(latest)
+    .filter(([, v]) => v.status === 'proposed' && (v.quality || {}).status === 'ok')
+    .map(([id, v]) => ({ id, v }))
+    .sort((a, b2) => a.id.localeCompare(b2.id))
+    .slice(0, limit);
+  let ok = 0; let adjust = 0; let failed = 0;
+  const queue = [...pool];
+  const run = async ({ id, v }) => {
+    const p = v.payload || {};
+    try {
+      const vr = await verifyVariant({ prompt: p.prompt, options: p.options, type: p.type });
+      const good = sameAnswer(p.answer, vr.answer, p.options || []);
+      if (b.apply) {
+        store.reviewVariant({ sourceQuestionId: id, version: v.version, status: good ? 'approved' : 'adjust', reason: good ? 'Gemini 批次複核：正確' : `Gemini 批次複核：答案疑義（模型解：${vr.answer || '無'}）` });
+      }
+      if (good) ok += 1; else adjust += 1;
+    } catch (e) { failed += 1; console.error('auto-review failed', id, e.message); }
+  };
+  await Promise.all(Array.from({ length: b.concurrency || 3 }, async () => { while (queue.length) { const x = queue.shift(); await run(x); } }));
+  res.json({ processed: pool.length, ok, adjust, failed, applied: !!b.apply, model: config.verifyProvider === 'openai' ? config.verifyModel : config.geminiModel });
+}));
 app.delete('/v1/variants/:id', (req, res) => {
   res.json({ deleted: store.deleteVariants(req.params.id) });
 });
