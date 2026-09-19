@@ -411,7 +411,8 @@ function variantAppHtml(it) {
       if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     }
     const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${vmath(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
-    const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (p.figureNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
+    const showNote = p.figureNote && !/無圖|無需作圖|不需作圖/.test(String(p.figureNote));
+    const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (showNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
     inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}`;
     const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
     review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
