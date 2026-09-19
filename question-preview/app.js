@@ -361,6 +361,16 @@ function fillHtml(it, a, quiz) {
 
 // 變化題（App 呈現；並列原題，原題保留）
 function variantKey(id, ver) { return `${id}#v${ver}`; }
+function variantHint(key) {
+  let h = '';
+  const ex = state.explanations[key];
+  if (ex) {
+    h = String(ex).replace(/\s+/g, ' ').replace(/答案[:：][\s\S]*$/, '').trim();
+    if (h.length > 40) h = h.slice(0, 40) + '…';
+  }
+  if (!h) h = '先看懂題意，把已知條件列出來，再一步步算。';
+  return `<p class="app-hint">解題提示：${vmath(h)}</p>`;
+}
 function variantAppHtml(it) {
   const vs = state.variants[it.id] || [];
   const v = vs[0];
@@ -393,17 +403,16 @@ function variantAppHtml(it) {
         else if (!quiz && i === ci) cls = 'correct';
         return `<button type="button" class="app-btn ${cls}" data-vopt="${i}" data-vkey="${esc(key)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${vmath(o)}</span></button>`;
       }).join('');
-      body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${play.choice === ci ? '' : ' bad'}">${play.choice === ci ? '答對了！' : `答錯了，正解是 ${LETTERS[ci]}`}</p><div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>` : ''}`;
+      body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${play.choice === ci ? '' : ' bad'}">${play.choice === ci ? '答對了！' : `答錯了，正解是 ${LETTERS[ci]}`}</p>${play.choice === ci ? '' : variantHint(key)}<div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>` : ''}`;
       if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     } else {
       body = `<div class="app-fill1"><input class="app-input app-fill-input" data-vkey="${esc(key)}" value="${esc(play.fill || '')}" placeholder="輸入答案"><button type="button" class="app-check" data-vkey="${esc(key)}">檢查</button></div>`;
-      if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${vmath(String(p.answer || ''))}）`}</p><div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>`;
+      if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${vmath(String(p.answer || ''))}）`}</p>${play.fillOk ? '' : variantHint(key)}<div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>`;
       if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     }
     const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${vmath(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
-    const why = v.rationale ? `<p class="app-hint">變化理由：${vmath(v.rationale)}</p>` : '';
     const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (p.figureNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
-    inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}${why}`;
+    inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}`;
     const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
     review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
