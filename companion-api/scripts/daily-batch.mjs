@@ -21,7 +21,7 @@ async function post(path, body) {
 }
 
 if (arg === 'assign') {
-  await post('/v1/assignments/sync-approved', {});
+  await post('/v1/assignments/auto', { perReviewer: Number(process.env.ASSIGN_CAP || 100), by: process.env.ASSIGN_BY || 'node' });
 } else if (arg === 'explain') {
   await post('/v1/explanations/variants', { limit: Number(process.env.EXPLAIN_LIMIT || 100), scope: process.env.EXPLAIN_SCOPE || 'approved', concurrency: 4 });
 } else if (arg === 'review') {

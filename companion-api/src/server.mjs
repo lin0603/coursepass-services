@@ -950,6 +950,78 @@ const planStageSchema = z.object({
   replace: z.boolean().optional(),
   dryRun: z.boolean().optional(),
 });
+// ---- 自動階段指派：第1階段廣度覆蓋（每人待審上限）、第2階段雙審（前一輪完成後）----
+const autoAssignSchema = z.object({
+  perReviewer: z.number().int().min(1).max(500).optional(),
+  by: z.enum(['node', 'lesson']).optional(),
+  courseId: z.string().max(64).optional(),
+  dryRun: z.boolean().optional(),
+});
+app.post('/v1/assignments/auto', asyncHandler(async (req, res) => {
+  const b = autoAssignSchema.safeParse(req.body || {}).data || {};
+  const cap = b.perReviewer || 100;
+  const by = b.by || 'node';
+  const courseId = b.courseId || config.batchCourseId;
+  const reviewers = store.listReviewers().filter((r) => r.active !== 0).map((r) => r.id);
+  if (!reviewers.length) return res.json({ reviewers: 0, stage1: 0, stage2: 0 });
+  const latest = {};
+  for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+  const approved = Object.entries(latest).filter(([, v]) => v.status === 'approved').map(([id]) => id).sort();
+  const src = await fetch(config.explainDataUrl).then((r) => r.json()).catch(() => ({ items: [] }));
+  const byId = new Map((src.items || []).map((q) => [q.id, q]));
+  // 現況
+  const qMap = new Map(); const pending = new Map();
+  for (const r of reviewers) pending.set(r, 0);
+  for (const a of store.listAssignments({})) {
+    if (!qMap.has(a.sourceQuestionId)) qMap.set(a.sourceQuestionId, []);
+    qMap.get(a.sourceQuestionId).push(a);
+    if (a.status !== 'done' && pending.has(a.reviewerId)) pending.set(a.reviewerId, pending.get(a.reviewerId) + 1);
+  }
+  // 廣度優先排序（依群組由小到大輪替）
+  const groups = new Map();
+  for (const id of approved) {
+    const q = byId.get(id) || {};
+    const key = (by === 'lesson' ? (q.chapter || '未分類') : (q.node || '未綁定')) || '未分類';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(id);
+  }
+  const ordered = [];
+  const keys = [...groups.keys()].sort((a, b2) => groups.get(a).length - groups.get(b2).length || a.localeCompare(b2));
+  for (let round = 0; ; round += 1) {
+    let progressed = false;
+    for (const k of keys) { const arr = groups.get(k); if (round < arr.length) { ordered.push(arr[round]); progressed = true; } }
+    if (!progressed) break;
+  }
+  const rows = [];
+  const pickReviewer = (exclude) => {
+    const cands = reviewers.filter((r) => !exclude.includes(r)).map((r) => ({ r, p: pending.get(r) })).filter((x) => x.p < cap);
+    if (!cands.length) return null;
+    cands.sort((a, b2) => a.p - b2.p);
+    return cands[0].r;
+  };
+  let stage1 = 0; let stage2 = 0;
+  for (const id of ordered) {
+    const rowsQ = qMap.get(id) || [];
+    if (rowsQ.length === 0) {
+      const r = pickReviewer([]);
+      if (!r) continue;
+      rows.push({ sourceQuestionId: id, reviewerId: r, courseId });
+      pending.set(r, pending.get(r) + 1); stage1 += 1;
+      if (!qMap.has(id)) qMap.set(id, []);
+      qMap.get(id).push({ sourceQuestionId: id, reviewerId: r, status: 'pending' });
+    } else if (rowsQ.length === 1 && rowsQ[0].status === 'done') {
+      const r = pickReviewer([rowsQ[0].reviewerId]);
+      if (!r) continue;
+      rows.push({ sourceQuestionId: id, reviewerId: r, courseId });
+      pending.set(r, pending.get(r) + 1); stage2 += 1;
+      qMap.get(id).push({ sourceQuestionId: id, reviewerId: r, status: 'pending' });
+    }
+  }
+  if (b.dryRun) return res.json({ dryRun: true, reviewers: reviewers.length, perReviewer: cap, stage1, stage2, rows: rows.length, pending: Object.fromEntries(pending) });
+  const batchId = `b_${Date.now().toString(36)}`;
+  const created = rows.length ? store.createAssignments(rows, batchId) : 0;
+  res.status(201).json({ reviewers: reviewers.length, perReviewer: cap, stage1, stage2, assignments: created });
+}));
 app.post('/v1/assignments/plan-stage', asyncHandler(async (req, res) => {
   const b = planStageSchema.safeParse(req.body || {}).data || {};
   const per = b.perReviewer || 100;
