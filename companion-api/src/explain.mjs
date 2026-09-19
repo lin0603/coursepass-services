@@ -34,7 +34,7 @@ export async function explainQuestion(input = {}) {
   if (!config.geminiApiKey) throw new Error('gemini key not configured (set GEMINI_API_KEY)');
   const id = input.id;
   // 已解題過就沿用，不再呼叫 Gemini（避免浪費 token）
-  if (id) {
+  if (id && !input.force) {
     const row = store.getExplanation(id);
     if (row && row.explanation) return { model: row.model || config.geminiModel, cached: true, explanation: row.explanation };
   }
@@ -46,7 +46,7 @@ export async function explainQuestion(input = {}) {
   const body = {
     systemInstruction: { parts: [{ text: hint ? `${SYSTEM_PROMPT}\n${hint}` : SYSTEM_PROMPT }] },
     contents: [{ role: 'user', parts: [{ text }] }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+    generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
   const res = await fetch(url, {
@@ -67,7 +67,7 @@ export async function explainQuestion(input = {}) {
 // 變化題（新題）的 AI 解說：以 id#v<version> 為快取鍵，與原題解題分開保存
 export async function explainVariant(input = {}) {
   const key = `${input.id}#v${input.version}`;
-  return explainQuestion({ id: key, prompt: input.prompt, answer: input.answer, type: input.type, options: input.options, note: input.note });
+  return explainQuestion({ id: key, prompt: input.prompt, answer: input.answer, type: input.type, options: input.options, note: input.note, force: input.force });
 }
 
 // ---- AI 優化迴路：依老師審查意見改寫題目 ----
@@ -111,7 +111,7 @@ export async function regenerateExplanation(input = {}) {
   const body = {
     systemInstruction: { parts: [{ text: hint ? `${SYSTEM_PROMPT}\n${hint}` : SYSTEM_PROMPT }] },
     contents: [{ role: 'user', parts: [{ text }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });

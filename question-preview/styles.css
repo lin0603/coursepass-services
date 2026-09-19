@@ -300,3 +300,5 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .cov-lesson { margin: 6px 0; }
 .cov-lname { font-size: 12px; color: #536c72; margin-bottom: 2px; }
 .cov-cb { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #536c72; }
+
+.var-ai .ai-actions .var-explain-regen { background: #eef4f1; color: #087e8b; border: 1px solid #cfe0dd; }

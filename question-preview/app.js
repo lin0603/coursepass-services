@@ -418,7 +418,7 @@ function variantSideHtml(it) {
   const ekey = variantKey(it.id, v.version);
   const ex = state.explanations[ekey];
   const explain = `<details class="ai-collapse var-ai"${ex ? ' open' : ''}><summary>AI 解新題 <span class="ai-tag">解說變化題</span></summary>
-      <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
+      <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button>${ex ? `<button type="button" class="ai-gen var-explain-regen" data-vkey="${esc(ekey)}">重新產生</button>` : ''}<span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
       <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
     </details>`;
   const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
@@ -739,7 +739,7 @@ el.list.addEventListener('click', async (event) => {
     render();
     return;
   }
-  const varExplain = event.target.closest('.var-explain');
+  const varExplain = event.target.closest('.var-explain, .var-explain-regen');
   if (varExplain) {
     const section = varExplain.closest('[data-id]');
     const id = section.dataset.id;
@@ -753,14 +753,21 @@ el.list.addEventListener('click', async (event) => {
       const p = v.payload || {};
       const res = await fetch(`${EXPLAIN_API}/v1/explain-variant`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-        body: JSON.stringify({ id, version: v.version, prompt: stripHtml(p.prompt || ''), options: p.options || [], answer: String(p.answer || ''), type: p.type || '' }),
+        body: JSON.stringify({ id, version: v.version, prompt: stripHtml(p.prompt || ''), options: p.options || [], answer: String(p.answer || ''), type: p.type || '', force: varExplain.classList.contains('var-explain-regen') }),
       });
       const d = await res.json();
       if (!res.ok || !d.explanation) throw new Error(d.error || res.status || 'empty');
       state.explanations[key] = d.explanation;
       stEl.textContent = '已解說（保留，無需再按）';
       outEl.innerHTML = vmath(d.explanation).replace(/\n/g, '<br>');
-      varExplain.hidden = true;
+      varExplain.disabled = false;
+      if (!varExplain.classList.contains('var-explain-regen')) varExplain.hidden = true;
+      const regen = section.querySelector('.var-explain-regen');
+      if (!regen) {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'ai-gen var-explain-regen'; btn.dataset.vkey = key; btn.textContent = '重新產生';
+        varExplain.after(btn);
+      }
     } catch (e) { stEl.textContent = '失敗：' + e.message; varExplain.disabled = false; }
     return;
   }

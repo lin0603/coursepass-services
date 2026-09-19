@@ -185,6 +185,7 @@ const explainVariantSchema = z.object({
   answer: z.string().max(2000).optional(),
   type: z.string().max(64).optional(),
   note: z.string().max(2000).optional(),
+  force: z.boolean().optional(),
 });
 app.post('/v1/explain-variant', asyncHandler(async (req, res) => {
   const parsed = explainVariantSchema.safeParse(req.body || {});
