@@ -22,6 +22,8 @@ async function post(path, body) {
 
 if (arg === 'assign') {
   await post('/v1/assignments/sync-approved', {});
+} else if (arg === 'review') {
+  await post('/v1/variants/auto-review', { limit: Number(process.env.REVIEW_LIMIT || 60), apply: true, concurrency: 3 });
 } else if (arg === 'gaps') {
   await post('/v1/variants/fill-gaps', { target: Number(process.env.GAP_TARGET || 5), limit: Number(process.env.GAP_LIMIT || 30), concurrency: 3 });
 } else {
