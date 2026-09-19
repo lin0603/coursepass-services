@@ -367,7 +367,7 @@ function variantAppHtml(it) {
   const quiz = state.appMode !== 'answer';
   const label = v ? `v${v.version} · ${esc(v.payload.type || '')}` : '尚未產生';
   const head = `<div class="app-head">變化題（App 呈現） <span class="app-label">${label}</span></div>`;
-  const btn = `<div class="ai-actions"><button type="button" class="ai-gen var-gen">${v ? '重新產生變化題' : '產生變化題'}</button><span class="ai-state var-state">${v && (v.quality || {}).status === 'needs_review' ? '品質需檢查' : ''}</span></div>`;
+  const btn = v ? '' : `<div class="ai-actions"><button type="button" class="ai-gen var-gen">產生變化題</button><span class="ai-state var-state"></span></div>`;
   let explain = '';
   if (v) {
     const ekey = variantKey(it.id, v.version);
@@ -418,11 +418,12 @@ function variantSideHtml(it) {
   const ekey = variantKey(it.id, v.version);
   const ex = state.explanations[ekey];
   const explain = `<details class="ai-collapse var-ai"${ex ? ' open' : ''}><summary>AI 解新題 <span class="ai-tag">解說變化題</span></summary>
-      <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button>${ex ? `<button type="button" class="ai-gen var-explain-regen" data-vkey="${esc(ekey)}">重新產生</button>` : ''}<span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
+      <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
       <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
     </details>`;
-  const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
-  const review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
+  const aiApproved = v.status === 'approved' && String(v.reason || '').startsWith('Gemini 批次複核');
+  const st = aiApproved ? '待確認（AI 判定合格）' : (v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審'));
+  const review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' && !aiApproved ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">
       <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span></div>`;
   return `<section class="variant-side" data-id="${esc(it.id)}">
@@ -761,13 +762,7 @@ el.list.addEventListener('click', async (event) => {
       stEl.textContent = '已解說（保留，無需再按）';
       outEl.innerHTML = vmath(d.explanation).replace(/\n/g, '<br>');
       varExplain.disabled = false;
-      if (!varExplain.classList.contains('var-explain-regen')) varExplain.hidden = true;
-      const regen = section.querySelector('.var-explain-regen');
-      if (!regen) {
-        const btn = document.createElement('button');
-        btn.type = 'button'; btn.className = 'ai-gen var-explain-regen'; btn.dataset.vkey = key; btn.textContent = '重新產生';
-        varExplain.after(btn);
-      }
+      varExplain.hidden = true;
     } catch (e) { stEl.textContent = '失敗：' + e.message; varExplain.disabled = false; }
     return;
   }
