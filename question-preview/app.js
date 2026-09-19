@@ -388,16 +388,16 @@ function variantAppHtml(it) {
       const ci = correctIndex(p.answer, p.options.length);
       const answered = play.choice != null;
       const opts = p.options.map((o, i) => {
-        let cls = ''; let dis = !quiz;
-        if (quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; dis = true; }
+        let cls = ''; const dis = !quiz;
+        if (quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; }
         else if (!quiz && i === ci) cls = 'correct';
         return `<button type="button" class="app-btn ${cls}" data-vopt="${i}" data-vkey="${esc(key)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${vmath(o)}</span></button>`;
       }).join('');
-      body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${play.choice === ci ? '' : ' bad'}">${play.choice === ci ? '答對了！' : `答錯了，正解是 ${LETTERS[ci]}`}</p>` : ''}`;
+      body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${play.choice === ci ? '' : ' bad'}">${play.choice === ci ? '答對了！' : `答錯了，正解是 ${LETTERS[ci]}`}</p><div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>` : ''}`;
       if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     } else {
       body = `<div class="app-fill1"><input class="app-input app-fill-input" data-vkey="${esc(key)}" value="${esc(play.fill || '')}" placeholder="輸入答案"><button type="button" class="app-check" data-vkey="${esc(key)}">檢查</button></div>`;
-      if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${vmath(String(p.answer || ''))}）`}</p>`;
+      if (play.fillChecked) body += `<p class="app-feedback${play.fillOk ? '' : ' bad'}">${play.fillOk ? '答對了！' : `再想想（正解：${vmath(String(p.answer || ''))}）`}</p><div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>`;
       if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     }
     const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${vmath(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
@@ -828,6 +828,13 @@ el.list.addEventListener('click', async (event) => {
       if (!varOk) { const inp = section.querySelector('.var-reason'); if (inp) inp.value = ''; }
       render();
     } catch (e) { alert('儲存失敗：' + e.message); }
+    return;
+  }
+  const vRedo = event.target.closest('.app-redo');
+  if (vRedo) {
+    const key = vRedo.dataset.vkey;
+    state.play[key] = {};
+    render();
     return;
   }
   const vOpt = event.target.closest('.app-btn[data-vopt]');

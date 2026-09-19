@@ -302,3 +302,7 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .cov-cb { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #536c72; }
 
 .var-ai .ai-actions .var-explain-regen { background: #eef4f1; color: #087e8b; border: 1px solid #cfe0dd; }
+
+.app-redo-row { margin-top: 6px; }
+.app-redo { background: #eef4f1; color: #087e8b; border: 1px solid #cfe0dd; border-radius: 8px; padding: 6px 12px; cursor: pointer; font: inherit; }
+.app-redo:hover { background: #e2efec; }
