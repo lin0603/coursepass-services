@@ -621,6 +621,37 @@ app.post('/v1/variants/:id', asyncHandler(async (req, res) => {
   res.status(201).json(row);
 }));
 
+// ---- 批次產生變化題解說（AI 解新題）----
+const explainVariantsSchema = z.object({
+  limit: z.number().int().min(1).max(300).optional(),
+  scope: z.enum(['approved', 'all']).optional(),
+  concurrency: z.number().int().min(1).max(6).optional(),
+  force: z.boolean().optional(),
+});
+app.post('/v1/explanations/variants', asyncHandler(async (req, res) => {
+  const b = explainVariantsSchema.safeParse(req.body || {}).data || {};
+  const limit = b.limit || 50;
+  const latest = {};
+  for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
+  let list = Object.entries(latest).filter(([, v]) => (v.payload || {}).prompt);
+  if (b.scope !== 'all') list = list.filter(([, v]) => v.status === 'approved');
+  list.sort((a, b2) => a[0].localeCompare(b2[0]));
+  const picks = list.slice(0, limit);
+  let processed = 0; let skipped = 0; let failed = 0;
+  const queue = [...picks];
+  const run = async ([id, v]) => {
+    const key = `${id}#v${v.version}`;
+    if (!b.force && store.getExplanation(key)) { skipped += 1; return; }
+    const p = v.payload || {};
+    try {
+      await explainVariant({ id, version: v.version, prompt: p.prompt || '', options: p.options || [], answer: String(p.answer || ''), type: p.type || '', force: b.force });
+      processed += 1;
+    } catch (e) { failed += 1; console.error('explain-variant failed', id, e.message); }
+  };
+  await Promise.all(Array.from({ length: b.concurrency || 3 }, async () => { while (queue.length) { const x = queue.shift(); await run(x); } }));
+  res.json({ scope: b.scope || 'approved', candidates: list.length, picked: picks.length, processed, skipped, failed });
+}));
+
 // ---- 覆蓋率（依課程自動計算；小節 × 難度）----
 const courseCache = new Map(); // url -> { at, data }
 async function loadQuestions(url) {
