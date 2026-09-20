@@ -46,6 +46,18 @@ function correctIndex(a, n) {
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+// 學生視角步驟標籤（標在對應區域；hover 顯示完整說明）
+const STEP = {
+  1: ['先別看解答', '以學生角度先別看解答：切「測驗模式」，先只看題目，感受學生的真實反應。'],
+  2: ['讀題：看得懂嗎', '用字、情境是這個年級懂的嗎？一次讀得懂、沒有模糊或雙解？'],
+  3: ['作答：按鍵清楚嗎', '看得出哪裡可以按？點了有明顯回饋？填充／連連看直覺嗎？'],
+  4: ['答錯提示：清楚嗎', '提示是否指出關鍵觀念（不是直接給答案）？看完知道下一步想什麼嗎？'],
+  5: ['AI 解題：聽得懂嗎', '步驟是否一步一腳印、用語白話、與答案一致？（原題與變化題分開評）'],
+  6: ['題型適合嗎', '這個考點用選擇／填充／連連看最有鑑別度嗎？不適合按「題型不適合」再改選。'],
+  7: ['合格／需調整＋意見', '變化題本體、AI 題解、原題分開評；需調整寫「學生卡在哪＋建議怎麼改」。'],
+};
+function stepTag(n) { const s = STEP[n]; return `<span class="step-tag" title="${esc(s[1])}"><b>${n}</b>${s[0]}</span>`; }
+
 // 變化題數字呈現：與 App（MathML 分數）一致
 function mathTokens(expr) {
   const re = /(\d+(?:\.\d+)?)|([×xX÷+\-＝=])/g;
@@ -326,7 +338,7 @@ function hintHtml(it) {
     if (h.length > 34) h = h.slice(0, 34) + '…';
   }
   if (!h) h = '先圈出題目關鍵字，再對照選項差異。';
-  return `<p class="app-hint">解題重點：${esc(h)}</p>`;
+  return `<p class="app-hint">${stepTag(4)}解題重點：${esc(h)}</p>`;
 }
 
 // 點選題（測驗模式可點、有回饋；解答模式顯示正解）
@@ -369,14 +381,14 @@ function variantHint(key) {
     if (h.length > 40) h = h.slice(0, 40) + '…';
   }
   if (!h) h = '先看懂題意，把已知條件列出來，再一步步算。';
-  return `<p class="app-hint">解題提示：${vmath(h)}</p>`;
+  return `<p class="app-hint">${stepTag(4)}解題提示：${vmath(h)}</p>`;
 }
 function variantAppHtml(it) {
   const vs = state.variants[it.id] || [];
   const v = vs[0];
   const quiz = state.appMode !== 'answer';
   const label = v ? `v${v.version} · ${esc(v.payload.type || '')}` : '尚未產生';
-  const head = `<div class="app-head">變化題（App 呈現） <span class="app-label">${label}</span></div>`;
+  const head = `<div class="app-head">變化題（App 呈現） <span class="app-label">${label}</span> ${stepTag(3)}</div>`;
   const btn = v ? '' : `<div class="ai-actions"><button type="button" class="ai-gen var-gen">產生變化題</button><span class="ai-state var-state"></span></div>`;
   let explain = '';
   if (v) {
@@ -413,9 +425,9 @@ function variantAppHtml(it) {
     const qual = (v.quality || {}).status === 'needs_review' ? `<p class="app-hint">品質需檢查：${vmath(((v.quality || {}).reasons || []).join('、'))}</p>` : '';
     const showNote = p.figureNote && !/無圖|無需作圖|不需作圖/.test(String(p.figureNote));
     const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (showNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
-    inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}`;
+    inner = `<div class="app-prompt">${stepTag(2)}${vmath(p.prompt || '')}</div>${fig}${body}${qual}`;
     const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
-    review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
+    review = `<div class="ai-review">${stepTag(7)}<button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
       <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">
       <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span></div>`;
   }
@@ -434,11 +446,11 @@ function variantSideHtml(it) {
     </details>`;
   const es = v.explainStatus || '';
   const st = es === 'approved' ? 'AI題解：合格' : (es === 'adjust' ? 'AI題解：需調整' : '待審');
-  const review = `<div class="ai-review"><button type="button" class="rv-btn vexp-ok${es === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn vexp-adjust${es === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state vexp-state">${st}</span></div>
+  const review = `<div class="ai-review">${stepTag(7)}<button type="button" class="rv-btn vexp-ok${es === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn vexp-adjust${es === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state vexp-state">${st}</span></div>
       <input class="vexp-note rv-note-inline" placeholder="對Ai題解的意見（需調整時填寫）" value="${esc(v.explainNote || '')}">
       <div class="var-save-row"><button type="button" class="mini-btn vexp-save">儲存註解</button><span class="ai-state vexp-save-state"></span></div>`;
   return `<section class="variant-side" data-id="${esc(it.id)}">
-    <div class="app-head">變化題Ai解題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span></div>
+    <div class="app-head">變化題Ai解題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span> ${stepTag(5)}</div>
     ${explain}${review}
   </section>`;
 }
@@ -519,7 +531,7 @@ function reviewHtml(it) {
     ${state.me ? '' : '<div class="rv-mine-hint">請先在上方「審查人」選擇你的名字，才會記錄這筆審查。</div>'}
     <div class="rv-group">
       <div class="rv-label">審查</div>
-      <div class="rv-btns">${statusBtns}${mismatchBtn}<button type="button" class="rv-clear">清除</button><span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
+      <div class="rv-btns">${stepTag(7)}${statusBtns}${stepTag(6)}${mismatchBtn}<button type="button" class="rv-clear">清除</button><span class="rv-state">${r.updatedAt ? '已儲存' : ''}</span></div>
     </div>
     <div class="rv-group rv-type-group"${showType ? '' : ' hidden'}>
       <div class="rv-label">題型</div>
@@ -635,7 +647,7 @@ function render() {
             ${it.imageUrl ? `<a class="fig" href="${it.imageUrl}" target="_blank"><img loading="lazy" src="${it.imageUrl}" alt="題目原圖"></a>` : '<div class="noimg">無圖</div>'}
           </div>
           ${appViewHtml(it)}
-          <details class="ai-collapse orig-ai"><summary>用 Gemini AI 解題 <span class="ai-tag">原題・需淺顯易懂</span></summary>${aiHtml(it)}</details>
+          <details class="ai-collapse orig-ai"><summary>用 Gemini AI 解題 <span class="ai-tag">原題・需淺顯易懂</span> ${stepTag(5)}</summary>${aiHtml(it)}</details>
         </div>
         <div class="col-right">
           ${variantAppHtml(it)}
@@ -670,7 +682,6 @@ function render() {
     el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
   }
   updateMyProgress();
-  updateIntroGuide();
 }
 function fill(sel, values, label) {
   for (const v of values) { const o = document.createElement('option'); o.value = v; o.textContent = `${v}`; sel.appendChild(o); }
@@ -1295,23 +1306,6 @@ if (figZoom) {
   figZoom.addEventListener('click', () => { figZoom.hidden = true; figZoom.querySelector('img').src = ''; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !figZoom.hidden) { figZoom.hidden = true; figZoom.querySelector('img').src = ''; } });
 }
-
-// ---- 學生視角說明：頁面最上方（第 1 題）顯示，捲到第 2 題自動收起 ----
-const introGuide = document.getElementById('introGuide');
-let introRaf = 0;
-function updateIntroGuide() {
-  if (!introGuide) return;
-  const second = el.list.querySelectorAll('.card')[1];
-  const filters = document.querySelector('.filters');
-  const cutoff = 63 + ((filters && filters.offsetHeight) || 60) + 8;
-  const hide = window.scrollY > 8 && !!second && second.getBoundingClientRect().top <= cutoff;
-  introGuide.classList.toggle('intro-hidden', hide);
-}
-window.addEventListener('scroll', () => {
-  if (introRaf) return;
-  introRaf = requestAnimationFrame(() => { introRaf = 0; updateIntroGuide(); });
-}, { passive: true });
-window.addEventListener('resize', updateIntroGuide);
 
 // ---- 使用說明 ----
 const helpBtn = document.getElementById('helpBtn');
