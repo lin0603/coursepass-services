@@ -14,7 +14,7 @@
 <meta name="preview-courses" content="https://resource-files-dev.starxinteractive.com/preview/courses.json">
 <meta name="resource-index" content="https://resource-index-dev.starxinteractive.com">
 <title>適康 數學 五年級 題目審查</title>
-<link rel="stylesheet" href="./styles.css?v=20260920d">
+<link rel="stylesheet" href="./styles.css?v=20260920a">
 </head>
 <body>
 <div id="loginGate" class="login-gate" hidden>
@@ -32,7 +32,6 @@
   <a id="sourceLink" class="mini-btn" target="_blank" rel="noopener" hidden>來源資源包</a>
   <input id="search" type="search" placeholder="搜尋題目 / 題號 / 課次">
   <div class="mode-switch" title="切換 App 呈現展示方式">
-    <span class="step-tag" title="以學生角度先別看解答：切「測驗模式」，先只看題目，感受學生的真實反應。"><b>1</b>先別看解答</span>
     <span class="mode-label">App 呈現展示方式</span>
     <button type="button" class="mode-btn on" data-mode="quiz">測驗模式</button>
     <button type="button" class="mode-btn" data-mode="answer">解答模式</button>
@@ -48,18 +47,6 @@
       <button id="helpClose" class="mode-btn" type="button">✕ 關閉</button>
     </div>
     <div class="help-body">
-      <h3>0. 學生視角審查（最重要・建議順序）</h3>
-      <p>請以「第一次學這題的學生」角度，依下列順序<b>實際走一遍</b>；能自己走完並看懂，才按合格。畫面上各對應區域有 <b>①–⑦ 標籤</b>（滑鼠移上去可看該步驟說明）。</p>
-      <ol>
-        <li><b>先別看解答</b>：切「測驗模式」，先只看題目，才能感受學生的真實反應。</li>
-        <li><b>讀題：看不看得懂</b>：用字、情境是這個年級懂的嗎？一次讀得懂嗎？有沒有模糊或雙解？</li>
-        <li><b>作答：按鍵夠不夠明確</b>：看得出哪裡可以按嗎？點了有沒有明顯回饋？填充／連連看直覺嗎？</li>
-        <li><b>答錯：小提示清不清楚</b>：提示是否指出關鍵觀念（而非直接給答案）？看完知道下一步該想什麼嗎？</li>
-        <li><b>AI 解題：能不能讓人理解</b>：原題「用 Gemini AI 解題」與變化題「AI 解新題」<b>分開評</b>；步驟是否一步一腳印、用語白話、與答案一致？</li>
-        <li><b>題型設計適不適當</b>：這個考點用選擇／填充／連連看最有鑑別度嗎？干擾項是否反映常見錯誤？不適合就按「題型不適合」再改選。</li>
-        <li><b>下判斷並寫意見</b>：<b>變化題本體、變化題的 AI 題解、原題</b>分開評「合格／需調整」；需調整時寫下「學生會卡在哪＋建議怎麼改」（按需調整會清空意見欄，方便重填）。</li>
-      </ol>
-      <p class="help-tip">意見寫法建議：<b>「學生會卡在哪 + 建議改法」</b>（例：五年級未教百分比，建議改為分數）。</p>
       <h3>1. 入口與登入</h3>
       <p>由索引站 <code>resource-index-dev.starxinteractive.com</code> 登入後，點課程卡「進入審題站」；或直接開啟本頁（<code>?course=knsh-g5-math-115a</code>）。請輸入通行碼登入。</p>
       <h3>2. 先選「你是誰」</h3>
@@ -139,6 +126,6 @@
 <div id="figZoom" class="fig-zoom" hidden><img alt="放大題目原圖"></div>
 <main id="list" class="list"></main>
 <div id="more" class="more"></div>
-<script src="./app.js?v=20260920d"></script>
+<script src="./app.js?v=20260920a"></script>
 </body>
 </html>
