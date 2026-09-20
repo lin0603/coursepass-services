@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, varFilter: '', variantReviewed: {}, courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, varFilter: '', courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -416,12 +416,13 @@ function variantAppHtml(it) {
     inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}`;
     const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
     review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
-      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">`;
+      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">
+      <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span></div>`;
   }
   return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div></section>`;
 }
 
-// 變化題側欄：AI 解新題 + 變化題審查（放在 AI 改寫建議上方）
+// 變化題側欄：AI 解新題 + 對 AI 題解的審查（放在 AI 改寫建議上方）
 function variantSideHtml(it) {
   const v = (state.variants[it.id] || [])[0];
   if (!v) return '';
@@ -431,13 +432,13 @@ function variantSideHtml(it) {
       <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
       <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
     </details>`;
-  const mineOk = !!(state.variantReviewed && state.variantReviewed[ekey]);
-  const st = v.status === 'approved' ? (mineOk ? '已合格' : '待確認') : (v.status === 'adjust' ? '需調整' : '待審');
-  const review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${mineOk ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
-      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">
-      <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span></div>`;
+  const es = v.explainStatus || '';
+  const st = es === 'approved' ? 'AI題解：合格' : (es === 'adjust' ? 'AI題解：需調整' : '待審');
+  const review = `<div class="ai-review"><button type="button" class="rv-btn vexp-ok${es === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn vexp-adjust${es === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state vexp-state">${st}</span></div>
+      <input class="vexp-note rv-note-inline" placeholder="對Ai題解的意見（需調整時填寫）" value="${esc(v.explainNote || '')}">
+      <div class="var-save-row"><button type="button" class="mini-btn vexp-save">儲存註解</button><span class="ai-state vexp-save-state"></span></div>`;
   return `<section class="variant-side" data-id="${esc(it.id)}">
-    <div class="app-head">變化題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span></div>
+    <div class="app-head">變化題Ai解題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span></div>
     ${explain}${review}
   </section>`;
 }
@@ -826,7 +827,6 @@ el.list.addEventListener('click', async (event) => {
     const v = (state.variants[id] || [])[0];
     if (!v) return;
     const reason = section.querySelector('.var-reason') ? section.querySelector('.var-reason').value : '';
-    if (varOk) { state.variantReviewed = state.variantReviewed || {}; state.variantReviewed[`${id}#v${v.version}`] = true; }
     try {
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/review`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
@@ -836,6 +836,48 @@ el.list.addEventListener('click', async (event) => {
       if (!res.ok) throw new Error(d.error || res.status);
       state.variants[id] = d.items || [];
       if (!varOk) { const inp = section.querySelector('.var-reason'); if (inp) inp.value = ''; }
+      render();
+    } catch (e) { alert('儲存失敗：' + e.message); }
+    return;
+  }
+  const vexpSave = event.target.closest('.vexp-save');
+  if (vexpSave) {
+    const section = vexpSave.closest('[data-id]');
+    const id = section.dataset.id;
+    const v = (state.variants[id] || [])[0];
+    if (!v) return;
+    const note = section.querySelector('.vexp-note') ? section.querySelector('.vexp-note').value : '';
+    const stEl = section.querySelector('.vexp-save-state');
+    stEl.textContent = '儲存中…';
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/explain-review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ version: v.version, note }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || res.status);
+      state.variants[id] = d.items || [];
+      stEl.textContent = '已儲存';
+    } catch (e) { stEl.textContent = '儲存失敗：' + e.message; }
+    return;
+  }
+  const vexpOk = event.target.closest('.vexp-ok');
+  const vexpAdjust = event.target.closest('.vexp-adjust');
+  if (vexpOk || vexpAdjust) {
+    const section = (vexpOk || vexpAdjust).closest('[data-id]');
+    const id = section.dataset.id;
+    const v = (state.variants[id] || [])[0];
+    if (!v) return;
+    const note = section.querySelector('.vexp-note') ? section.querySelector('.vexp-note').value : '';
+    try {
+      const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/explain-review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
+        body: JSON.stringify({ version: v.version, status: vexpOk ? 'approved' : 'adjust', note: vexpOk ? note : '' }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || res.status);
+      state.variants[id] = d.items || [];
+      if (!vexpOk) { const inp = section.querySelector('.vexp-note'); if (inp) inp.value = ''; }
       render();
     } catch (e) { alert('儲存失敗：' + e.message); }
     return;
@@ -1213,7 +1255,7 @@ async function runAssign(preview) {
     }
   } catch (e) { st.textContent = '失敗：' + e.message; }
 }
-el.meSelect.addEventListener('change', (e) => { state.me = e.target.value; localStorage.setItem('cp_me', state.me); render(); });
+el.meSelect.addEventListener('change', (e) => { state.me = e.target.value; localStorage.setItem('cp_me', state.me); if (state.me) setMatchView('mine'); else render(); });
 el.addReviewer.addEventListener('click', async () => {
   const name = prompt('新增審查人姓名');
   if (!name || !name.trim()) return;
@@ -1222,7 +1264,7 @@ el.addReviewer.addEventListener('click', async () => {
     const r = await res.json();
     if (!res.ok) throw new Error(r.error || res.status);
     state.reviewers.push(r); state.me = r.id; localStorage.setItem('cp_me', r.id);
-    renderMeSelect(); renderAssignPanel(); render();
+    renderMeSelect(); renderAssignPanel(); setMatchView('mine');
   } catch (e) { alert('新增失敗：' + e.message); }
 });
 el.assignToggle.addEventListener('click', () => {
@@ -1412,6 +1454,7 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
     state.assignments = {};
     for (const a of (asg.items || [])) (state.assignments[a.sourceQuestionId] = state.assignments[a.sourceQuestionId] || []).push(a);
     renderMeSelect();
+    if (state.me) setMatchView('mine');
     const units = [...new Set(state.items.map((i) => i.unit).filter(Boolean))];
     const unitNo = (u) => Math.min(...state.items.filter((i) => i.unit === u).map((i) => parseInt(i.section, 10) || 99));
     units.sort((a, b) => unitNo(a) - unitNo(b));

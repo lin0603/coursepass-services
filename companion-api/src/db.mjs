@@ -68,6 +68,7 @@ if (!reviewCols.includes('typeMismatch')) db.exec('ALTER TABLE reviews ADD COLUM
 for (const [table, col] of [['question_reviews', 'courseId'], ['assignments', 'courseId'],
   ['question_reviews', 'aiStatus'], ['question_reviews', 'aiNote'],
   ['question_revisions', 'reason'],
+  ['variants', 'explainStatus'], ['variants', 'explainNote'],
   ['explanations', 'reviewStatus'], ['explanations', 'regeneratedAt']]) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
   if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
@@ -338,7 +339,7 @@ export const store = {
   listVariants({ sourceQuestionId } = {}) {
     const where = sourceQuestionId ? 'WHERE sourceQuestionId=?' : '';
     const params = sourceQuestionId ? [sourceQuestionId] : [];
-    return db.prepare(`SELECT id, sourceQuestionId, nodeId, courseId, version, payload, rationale, model, status, reason, quality, createdAt
+    return db.prepare(`SELECT id, sourceQuestionId, nodeId, courseId, version, payload, rationale, model, status, reason, explainStatus, explainNote, quality, createdAt
                        FROM variants ${where} ORDER BY sourceQuestionId, version DESC`)
       .all(...params).map((r) => ({ ...r, payload: JSON.parse(r.payload || '{}'), quality: JSON.parse(r.quality || '{}') }));
   },
@@ -361,6 +362,14 @@ export const store = {
   reviewVariant({ sourceQuestionId, version, status, reason }) {
     db.prepare('UPDATE variants SET status=?, reason=? WHERE sourceQuestionId=? AND version=?').run(status, reason || '', sourceQuestionId, version);
     if (status === 'approved') db.prepare("UPDATE variants SET status='superseded' WHERE sourceQuestionId=? AND version<>?").run(sourceQuestionId, version);
+    return this.listVariants({ sourceQuestionId });
+  },
+  // 變化題的「AI 解新題」審查（與變化題本體審查分開記錄）
+  reviewVariantExplain({ sourceQuestionId, version, status, note }) {
+    const cur = db.prepare('SELECT explainStatus, explainNote FROM variants WHERE sourceQuestionId=? AND version=?').get(sourceQuestionId, version) || {};
+    const nextStatus = status === undefined ? (cur.explainStatus || '') : (status || '');
+    const nextNote = note === undefined ? (cur.explainNote || '') : (note || '');
+    db.prepare('UPDATE variants SET explainStatus=?, explainNote=? WHERE sourceQuestionId=? AND version=?').run(nextStatus, nextNote, sourceQuestionId, version);
     return this.listVariants({ sourceQuestionId });
   },
   listRevisions({ sourceQuestionId } = {}) {

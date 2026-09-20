@@ -14,7 +14,7 @@
 <meta name="preview-courses" content="https://resource-files-dev.starxinteractive.com/preview/courses.json">
 <meta name="resource-index" content="https://resource-index-dev.starxinteractive.com">
 <title>適康 數學 五年級 題目審查</title>
-<link rel="stylesheet" href="./styles.css?v=20260918v">
+<link rel="stylesheet" href="./styles.css?v=20260920a">
 </head>
 <body>
 <div id="loginGate" class="login-gate" hidden>
@@ -55,7 +55,7 @@
       <ul>
         <li><b>左欄（原題）</b>：題幹與選項正解 → <b>題目原圖</b> → <b>App 呈現（原題）</b> → <b>用 Gemini AI 解題</b>（預設收合，點擊展開）。</li>
         <li><b>中欄</b>：<b>變化題（App 呈現）vN</b>：AI 依原題產生的新題，可實際作答（切「測驗模式」練習、「解答模式」看正解）。</li>
-        <li><b>右欄</b>：<b>變化題（新題）· vN</b>：變化題的 AI 解說與審查；下方為題目本體審查區。</li>
+        <li><b>右欄</b>：<b>變化題Ai解題（新題）· vN</b>：AI 對變化題的解說與「對 AI 題解」的審查；題目本體的審查在中欄下方。</li>
       </ul>
       <h3>4. 變化題（App 呈現）vN</h3>
       <ul>
@@ -63,11 +63,11 @@
         <li>標題顯示版本（v1、v2…）與題型；按 <b>重新產生變化題</b> 會再產生新版本。</li>
         <li>AI 產生後會<b>自動驗算</b>（另一個模型獨立解一次）；有疑義會在卡片與右欄標示。</li>
       </ul>
-      <h3>5. 變化題（新題）· vN</h3>
+      <h3>5. 變化題Ai解題（新題）· vN</h3>
       <ul>
         <li><b>AI 解新題</b>：解說這道變化題的做法與答案；<b>若已有解說會自動展開</b>，沒有時按「產生解說」。</li>
-        <li><b>合格／需調整</b>：對變化題的審查結果（點即存）。按 <b>需調整</b> 時會<b>清空意見欄</b>，方便重新填寫。</li>
-        <li><b>儲存註解</b>：只儲存意見、<b>不改變</b>合格／需調整狀態。</li>
+        <li><b>合格／需調整</b>：對這道變化題 <b>AI 題解</b> 的審查結果（與題目本體審查分開記錄，點即存）。按 <b>需調整</b> 時會<b>清空意見欄</b>，方便重新填寫。</li>
+        <li><b>儲存註解</b>：只儲存「對 AI 題解」的意見、<b>不改變</b>合格／需調整狀態。</li>
       </ul>
       <h3>6. 變化題品質與篩選</h3>
       <ul>
@@ -126,6 +126,6 @@
 <div id="figZoom" class="fig-zoom" hidden><img alt="放大題目原圖"></div>
 <main id="list" class="list"></main>
 <div id="more" class="more"></div>
-<script src="./app.js?v=20260918v"></script>
+<script src="./app.js?v=20260920a"></script>
 </body>
 </html>
