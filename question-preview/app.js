@@ -670,6 +670,7 @@ function render() {
     el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
   }
   updateMyProgress();
+  updateIntroGuide();
 }
 function fill(sel, values, label) {
   for (const v of values) { const o = document.createElement('option'); o.value = v; o.textContent = `${v}`; sel.appendChild(o); }
@@ -1294,6 +1295,23 @@ if (figZoom) {
   figZoom.addEventListener('click', () => { figZoom.hidden = true; figZoom.querySelector('img').src = ''; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !figZoom.hidden) { figZoom.hidden = true; figZoom.querySelector('img').src = ''; } });
 }
+
+// ---- 學生視角說明：頁面最上方（第 1 題）顯示，捲到第 2 題自動收起 ----
+const introGuide = document.getElementById('introGuide');
+let introRaf = 0;
+function updateIntroGuide() {
+  if (!introGuide) return;
+  const second = el.list.querySelectorAll('.card')[1];
+  const filters = document.querySelector('.filters');
+  const cutoff = 63 + ((filters && filters.offsetHeight) || 60) + 8;
+  const hide = window.scrollY > 8 && !!second && second.getBoundingClientRect().top <= cutoff;
+  introGuide.classList.toggle('intro-hidden', hide);
+}
+window.addEventListener('scroll', () => {
+  if (introRaf) return;
+  introRaf = requestAnimationFrame(() => { introRaf = 0; updateIntroGuide(); });
+}, { passive: true });
+window.addEventListener('resize', updateIntroGuide);
 
 // ---- 使用說明 ----
 const helpBtn = document.getElementById('helpBtn');
