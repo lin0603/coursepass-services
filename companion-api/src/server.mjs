@@ -828,21 +828,38 @@ app.post('/v1/variants/:id/note', (req, res) => {
   const b = req.body || {};
   const version = Number(b.version);
   if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
-  res.json({ items: store.updateVariantReason({ sourceQuestionId: req.params.id, version, reason: b.reason }) });
+  const reviewerId = String(b.reviewerId || '').trim();
+  const items = reviewerId
+    ? store.upsertVariantReview({ sourceQuestionId: req.params.id, version, reviewerId, reason: b.reason })
+    : store.updateVariantReason({ sourceQuestionId: req.params.id, version, reason: b.reason });
+  res.json({ items });
 });
 app.post('/v1/variants/:id/review', (req, res) => {
   const b = req.body || {};
   const version = Number(b.version);
   if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
-  res.json({ items: store.reviewVariant({ sourceQuestionId: req.params.id, version, status: b.status === 'approved' ? 'approved' : 'adjust', reason: b.reason }) });
+  const status = b.status === 'approved' ? 'approved' : 'adjust';
+  const reason = b.reason;
+  const reviewerId = String(b.reviewerId || '').trim();
+  const items = reviewerId
+    ? store.upsertVariantReview({ sourceQuestionId: req.params.id, version, reviewerId, status, reason })
+    : store.reviewVariant({ sourceQuestionId: req.params.id, version, status, reason });
+  res.json({ items });
 });
 app.post('/v1/variants/:id/explain-review', (req, res) => {
   const b = req.body || {};
   const version = Number(b.version);
   if (!Number.isInteger(version)) return res.status(400).json({ error: 'version required' });
   const status = b.status === 'approved' ? 'approved' : (b.status === 'adjust' ? 'adjust' : undefined);
-  res.json({ items: store.reviewVariantExplain({ sourceQuestionId: req.params.id, version, status, note: typeof b.note === 'string' ? b.note : undefined }) });
+  const note = typeof b.note === 'string' ? b.note : undefined;
+  const reviewerId = String(b.reviewerId || '').trim();
+  const items = reviewerId
+    ? store.upsertVariantReview({ sourceQuestionId: req.params.id, version, reviewerId, explainStatus: status, explainNote: note })
+    : store.reviewVariantExplain({ sourceQuestionId: req.params.id, version, status, note });
+  res.json({ items });
 });
+app.get('/v1/variant-reviews', (req, res) => res.json({ items: store.listVariantReviews({ sourceQuestionId: req.query.question, reviewerId: req.query.reviewer }) }));
+app.get('/v1/variants/:id/history', (req, res) => res.json({ items: store.variantReviewHistory(req.params.id) }));
 app.post('/v1/rewrites/:id', asyncHandler(async (req, res) => {
   const parsed = rewriteSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'invalid body', details: parsed.error.flatten() });

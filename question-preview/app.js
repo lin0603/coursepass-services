@@ -1,5 +1,5 @@
 'use strict';
-const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, varFilter: '', courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
+const state = { items: [], appdata: {}, matching: {}, matchingPlay: {}, reviews: {}, qreviews: {}, reviewers: [], assignments: {}, me: (localStorage.getItem('cp_me') || ''), explanations: {}, quality: {}, revisions: {}, variants: {}, variantReviews: {}, explanationQueue: {}, play: {}, appMode: 'quiz', view: 'all', qualityOnly: false, varFilter: '', courseId: '', q: '', chapter: '', node: '', type: '', status: '', review: '', imageOnly: false, limit: 100 };
 const el = {
   subtitle: document.getElementById('subtitle'),
   courseTitle: document.getElementById('courseTitle'),
@@ -110,7 +110,23 @@ function reviewOf(id) {
   const rows = state.qreviews[id] || [];
   return rows.find((r) => r.reviewerId === state.me) || rows[0] || EMPTY_REVIEW;
 }
+// 只取「我自己」的審查（未審過＝空），用於表單與存檔，避免帶入別人的內容
+function myReviewOf(id) {
+  return (state.qreviews[id] || []).find((r) => r.reviewerId === state.me) || EMPTY_REVIEW;
+}
 function othersOf(id) { return (state.qreviews[id] || []).filter((r) => r.reviewerId !== state.me); }
+// 變化題審查（逐審查人）
+function variantReviewsOf(id, version) { return state.variantReviews[variantKey(id, version)] || {}; }
+function myVariantReview(id, version) { return variantReviewsOf(id, version)[state.me] || {}; }
+function othersVariantReviews(id, version) {
+  const g = variantReviewsOf(id, version);
+  return Object.entries(g).filter(([rid]) => rid !== state.me).map(([rid, r]) => ({ reviewerId: rid, ...r }));
+}
+function setVariantReviewLocal(id, version, patch) {
+  const k = variantKey(id, version);
+  const g = (state.variantReviews[k] = state.variantReviews[k] || {});
+  g[state.me] = { ...(g[state.me] || {}), ...patch, reviewerId: state.me, updatedAt: new Date().toISOString() };
+}
 function reviewerName(id) { const r = state.reviewers.find((x) => x.id === id); return r ? r.name : (id ? id : '未指定'); }
 function assignmentsOf(id) { return state.assignments[id] || []; }
 function allAssignments() { return Object.values(state.assignments).flat(); }
@@ -422,12 +438,17 @@ function variantAppHtml(it) {
     const showNote = p.figureNote && !/無圖|無需作圖|不需作圖/.test(String(p.figureNote));
     const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (showNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
     inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}`;
-    const st = v.status === 'approved' ? '已合格' : (v.status === 'adjust' ? '需調整' : '待審');
-    review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${v.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${v.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
-      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(v.reason || '')}">
-      <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span></div>`;
+    const mine = myVariantReview(it.id, v.version);
+    const st = !state.me ? '請先選審查人' : (mine.status === 'approved' ? '你：合格' : (mine.status === 'adjust' ? '你：需調整' : '你尚未審'));
+    const others = othersVariantReviews(it.id, v.version);
+    const othersBox = others.length ? `<div class="rv-others"><div class="title">其他審查人意見</div>${others.map((r) => `<div class="rv-other"><span class="who">${esc(reviewerName(r.reviewerId))}</span><span class="tag ${r.status || 'none'}">${REVIEW_LABELS[r.status] || '未設定'}</span><span class="note">${esc(r.reason || '')}</span></div>`).join('')}</div>` : '';
+    review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${mine.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${mine.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
+      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(mine.reason || '')}">
+      <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span><button type="button" class="mini-btn var-history">查看審查歷史</button></div>
+      ${othersBox}
+      <div class="rv-history-box" hidden></div>`;
   }
-  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div></section>`;
+  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div>${review}</section>`;
 }
 
 // 變化題側欄：AI 解新題 + 對 AI 題解的審查（放在 AI 改寫建議上方）
@@ -440,11 +461,15 @@ function variantSideHtml(it) {
       <div class="ai-actions"><button type="button" class="ai-gen var-explain" data-vkey="${esc(ekey)}"${ex ? ' hidden' : ''}>產生解說</button><span class="ai-state var-explain-state">${ex ? '已解說（保留，無需再按）' : ''}</span></div>
       <div class="ai-out var-explain-out">${ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解說（可先按「產生解說」）</span>'}</div>
     </details>`;
-  const es = v.explainStatus || '';
-  const st = es === 'approved' ? 'AI題解：合格' : (es === 'adjust' ? 'AI題解：需調整' : '待審');
+  const mine = myVariantReview(it.id, v.version);
+  const es = mine.explainStatus || '';
+  const st = !state.me ? '請先選審查人' : (es === 'approved' ? '你：AI題解合格' : (es === 'adjust' ? '你：AI題解需調整' : '你尚未審'));
+  const others = othersVariantReviews(it.id, v.version).filter((r) => r.explainStatus || r.explainNote);
+  const othersBox = others.length ? `<div class="rv-others"><div class="title">其他審查人對 AI 題解的意見</div>${others.map((r) => `<div class="rv-other"><span class="who">${esc(reviewerName(r.reviewerId))}</span><span class="tag ${r.explainStatus || 'none'}">${REVIEW_LABELS[r.explainStatus] || '未設定'}</span><span class="note">${esc(r.explainNote || '')}</span></div>`).join('')}</div>` : '';
   const review = `<div class="ai-review"><button type="button" class="rv-btn vexp-ok${es === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn vexp-adjust${es === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state vexp-state">${st}</span></div>
-      <textarea class="vexp-note rv-note-inline" rows="4" placeholder="對Ai題解的意見（需調整時填寫）">${esc(v.explainNote || '')}</textarea>
-      <div class="var-save-row">${ex ? `<button type="button" class="mini-btn vexp-copy" data-vkey="${esc(ekey)}">複製解題內容到意見框</button>` : ''}<button type="button" class="mini-btn vexp-save">儲存註解</button><span class="ai-state vexp-save-state"></span></div>`;
+      <textarea class="vexp-note rv-note-inline" rows="4" placeholder="對Ai題解的意見（需調整時填寫）">${esc(mine.explainNote || '')}</textarea>
+      <div class="var-save-row">${ex ? `<button type="button" class="mini-btn vexp-copy" data-vkey="${esc(ekey)}">複製解題內容到意見框</button>` : ''}<button type="button" class="mini-btn vexp-save">儲存註解</button><span class="ai-state vexp-save-state"></span></div>
+      ${othersBox}`;
   return `<section class="variant-side" data-id="${esc(it.id)}">
     <div class="app-head">變化題Ai解題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span></div>
     ${explain}${review}
@@ -512,7 +537,7 @@ function revisionHtml(it) {
 }
 
 function reviewHtml(it) {
-  const r = reviewOf(it.id);
+  const r = myReviewOf(it.id);
   const suggested = suggestedTypeOf(it);
   const statusBtns = ['approved', 'adjust', 'rejected'].map((s) => `<button type="button" class="rv-btn rv-status-btn${r.status === s ? ' on' : ''}" data-status="${s}">${REVIEW_LABELS[s]}</button>`).join('');
   const mismatchBtn = `<button type="button" class="rv-btn rv-mismatch${r.typeMismatch ? ' on' : ''}">題型不適合</button>`;
@@ -557,7 +582,7 @@ function aiHtml(it) {
   const ex = state.explanations[it.id];
   const out = ex ? vmath(ex).replace(/\n/g, '<br>') : '<span class="ai-none">尚未產生解題（可先按「產生解題」）</span>';
   const genBtn = ex ? '' : '<button type="button" class="ai-gen">產生解題</button>';
-  const mine = reviewOf(it.id);
+  const mine = myReviewOf(it.id);
   const ai = mine.aiStatus || '';
   const review = ex ? `<div class="ai-review">
       <button type="button" class="rv-btn ai-ok${ai === 'approved' ? ' on' : ''}">合格</button>
@@ -813,17 +838,19 @@ el.list.addEventListener('click', async (event) => {
     const id = section.dataset.id;
     const v = (state.variants[id] || [])[0];
     if (!v) return;
-    const reason = section.querySelector('.var-reason') ? section.querySelector('.var-reason').value : '';
     const stEl = section.querySelector('.var-save-state');
+    if (!state.me) { stEl.textContent = '請先選審查人'; return; }
+    const reason = section.querySelector('.var-reason') ? section.querySelector('.var-reason').value : '';
     stEl.textContent = '儲存中…';
     try {
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/note`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-        body: JSON.stringify({ version: v.version, reason }),
+        body: JSON.stringify({ version: v.version, reason, reviewerId: state.me }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || res.status);
       state.variants[id] = d.items || [];
+      setVariantReviewLocal(id, v.version, { reason });
       stEl.textContent = '已儲存';
     } catch (e) { stEl.textContent = '儲存失敗：' + e.message; }
     return;
@@ -835,16 +862,18 @@ el.list.addEventListener('click', async (event) => {
     const id = section.dataset.id;
     const v = (state.variants[id] || [])[0];
     if (!v) return;
+    if (!state.me) { alert('請先在上方「審查人」選擇你的名字'); return; }
     const reason = section.querySelector('.var-reason') ? section.querySelector('.var-reason').value : '';
+    const status = varOk ? 'approved' : 'adjust';
     try {
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/review`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-        body: JSON.stringify({ version: v.version, status: varOk ? 'approved' : 'adjust', reason: varOk ? reason : '' }),
+        body: JSON.stringify({ version: v.version, status, reason: varOk ? reason : '', reviewerId: state.me }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || res.status);
       state.variants[id] = d.items || [];
-      if (!varOk) { const inp = section.querySelector('.var-reason'); if (inp) inp.value = ''; }
+      setVariantReviewLocal(id, v.version, { status, reason: varOk ? reason : '' });
       render();
     } catch (e) { alert('儲存失敗：' + e.message); }
     return;
@@ -863,17 +892,19 @@ el.list.addEventListener('click', async (event) => {
     const id = section.dataset.id;
     const v = (state.variants[id] || [])[0];
     if (!v) return;
-    const note = section.querySelector('.vexp-note') ? section.querySelector('.vexp-note').value : '';
     const stEl = section.querySelector('.vexp-save-state');
+    if (!state.me) { stEl.textContent = '請先選審查人'; return; }
+    const note = section.querySelector('.vexp-note') ? section.querySelector('.vexp-note').value : '';
     stEl.textContent = '儲存中…';
     try {
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/explain-review`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-        body: JSON.stringify({ version: v.version, note }),
+        body: JSON.stringify({ version: v.version, note, reviewerId: state.me }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || res.status);
       state.variants[id] = d.items || [];
+      setVariantReviewLocal(id, v.version, { explainNote: note });
       stEl.textContent = '已儲存';
     } catch (e) { stEl.textContent = '儲存失敗：' + e.message; }
     return;
@@ -885,16 +916,18 @@ el.list.addEventListener('click', async (event) => {
     const id = section.dataset.id;
     const v = (state.variants[id] || [])[0];
     if (!v) return;
+    if (!state.me) { alert('請先在上方「審查人」選擇你的名字'); return; }
     const note = section.querySelector('.vexp-note') ? section.querySelector('.vexp-note').value : '';
+    const explainStatus = vexpOk ? 'approved' : 'adjust';
     try {
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/explain-review`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-        body: JSON.stringify({ version: v.version, status: vexpOk ? 'approved' : 'adjust', note: vexpOk ? note : '' }),
+        body: JSON.stringify({ version: v.version, status: explainStatus, note: vexpOk ? note : '', reviewerId: state.me }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || res.status);
       state.variants[id] = d.items || [];
-      if (!vexpOk) { const inp = section.querySelector('.vexp-note'); if (inp) inp.value = ''; }
+      setVariantReviewLocal(id, v.version, { explainStatus, explainNote: vexpOk ? note : '' });
       render();
     } catch (e) { alert('儲存失敗：' + e.message); }
     return;
@@ -933,7 +966,7 @@ el.list.addEventListener('click', async (event) => {
     const stEl = section.querySelector('.ai-review-state');
     if (!state.me) { stEl.textContent = '請先選擇審查人'; return; }
     const item = state.items.find((i) => i.id === id);
-    const cur = reviewOf(id);
+    const cur = myReviewOf(id);
     const aiStatus = aiOk ? 'approved' : 'adjust';
     const aiNote = section.querySelector('.ai-note').value;
     try {
@@ -973,7 +1006,7 @@ el.list.addEventListener('click', async (event) => {
     const stateEl = section.querySelector('.rv-state');
     if (!state.me) { stateEl.textContent = '請先選擇審查人'; return; }
     const item = state.items.find((i) => i.id === id);
-    const cur = reviewOf(id);
+    const cur = myReviewOf(id);
     try {
       const saved = await saveReview(id, item ? item.node : undefined, cur.status || '', section.querySelector('.rv-note').value, cur.type || '', cur.typeMismatch);
       const rows = state.qreviews[id] || [];
@@ -1007,6 +1040,23 @@ el.list.addEventListener('click', async (event) => {
     } catch (e) { box.textContent = '失敗：' + e.message; }
     return;
   }
+  const varHistBtn = event.target.closest('.var-history');
+  if (varHistBtn) {
+    const section = varHistBtn.closest('[data-id]');
+    const id = section.dataset.id;
+    const box = section.querySelector('.rv-history-box');
+    if (!box) return;
+    if (!box.hidden) { box.hidden = true; return; }
+    box.hidden = false; box.textContent = '載入中…';
+    try {
+      const d = await (await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/history`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
+      const items = d.items || [];
+      box.innerHTML = items.length
+        ? items.map((h) => `<div class="rv-hist">${esc((h.at || '').replace('T', ' ').slice(0, 16))}　${esc(h.reviewerName || h.reviewerId || '未署名')}　${h.kind === 'explain' ? 'AI題解：' : '變化題：'}${REVIEW_LABELS[h.fromStatus || ''] || '未設定'} → ${REVIEW_LABELS[h.toStatus || ''] || '未設定'}${h.note ? `　「${esc(h.note)}」` : ''}</div>`).join('')
+        : '（尚無歷史）';
+    } catch (e) { box.textContent = '失敗：' + e.message; }
+    return;
+  }
   const choiceBtn = event.target.closest('.app-btn[data-choice]');
   if (choiceBtn) {
     if (state.appMode === 'answer') return;
@@ -1033,7 +1083,7 @@ el.list.addEventListener('click', async (event) => {
     const a = state.appdata[id] || {};
     const st = section.querySelector('.rev-state');
     const notes = [];
-    const mine = reviewOf(id); if (mine.note) notes.push(`（我）${mine.note}`);
+    const mine = myReviewOf(id); if (mine.note) notes.push(`（我）${mine.note}`);
     for (const o of othersOf(id)) if (o.note) notes.push(`${reviewerName(o.reviewerId)}：${o.note}`);
     if (mine.typeMismatch && mine.type) notes.push(`建議題型：${typeLabel(mine.type)}`);
     st.textContent = '產生中…'; revGen.disabled = true;
@@ -1132,7 +1182,7 @@ el.list.addEventListener('click', async (event) => {
       stateEl.textContent = '已清除';
       return;
     }
-    const prev = reviewOf(id);
+    const prev = myReviewOf(id);
     const status = statusBtn ? statusBtn.dataset.status : (prev.status || '');
     let type = typeBtn ? typeBtn.dataset.type : (prev.type || '');
     let typeMismatch = prev.typeMismatch;
@@ -1178,7 +1228,7 @@ el.list.addEventListener('focusout', async (event) => {
   const section = note.closest('.review');
   const id = section.dataset.id;
   const item = state.items.find((i) => i.id === id);
-  const cur = reviewOf(id);
+  const cur = myReviewOf(id);
   if (note.value === (cur.note || '')) return;
   const stateEl = section.querySelector('.rv-state');
   if (!state.me) { stateEl.textContent = '請先選擇審查人'; return; }
@@ -1465,6 +1515,11 @@ async function boot(DATA_URL, APP_DATA_URL, MATCHING_URL, EXPLANATIONS_URL, QUAL
     for (const q of (explQ.items || [])) state.explanationQueue[q.sourceQuestionId] = q;
     state.variants = {};
     for (const v of (vars.items || [])) (state.variants[v.sourceQuestionId] = state.variants[v.sourceQuestionId] || []).push(v);
+    state.variantReviews = {};
+    try {
+      const vrv = await (await fetch(`${REVIEWS_API}/v1/variant-reviews`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
+      for (const r of (vrv.items || [])) { const k = variantKey(r.sourceQuestionId, r.version); (state.variantReviews[k] = state.variantReviews[k] || {})[r.reviewerId] = r; }
+    } catch { /* ignore */ }
     state.qreviews = {};
     for (const r of (rev.items || [])) (state.qreviews[r.sourceQuestionId] = state.qreviews[r.sourceQuestionId] || []).push(r);
     state.reviewers = rvs.items || [];

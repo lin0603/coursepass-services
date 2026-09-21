@@ -55,6 +55,17 @@ CREATE TABLE IF NOT EXISTS variants (
   reason TEXT, quality TEXT, createdAt TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_var_q ON variants(sourceQuestionId);
+CREATE TABLE IF NOT EXISTS variant_reviews (
+  sourceQuestionId TEXT, version INTEGER, reviewerId TEXT,
+  status TEXT, reason TEXT, explainStatus TEXT, explainNote TEXT, updatedAt TEXT,
+  PRIMARY KEY (sourceQuestionId, version, reviewerId)
+);
+CREATE INDEX IF NOT EXISTS ix_vreview_q ON variant_reviews(sourceQuestionId);
+CREATE TABLE IF NOT EXISTS variant_review_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, sourceQuestionId TEXT, version INTEGER,
+  reviewerId TEXT, reviewerName TEXT, kind TEXT, fromStatus TEXT, toStatus TEXT, note TEXT, at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_vrhist_q ON variant_review_history(sourceQuestionId);
 CREATE INDEX IF NOT EXISTS ix_answers_learner ON answers(learnerId, createdAt);
 CREATE INDEX IF NOT EXISTS ix_wrongbook_learner ON wrongbook(learnerId, lastWrongAt);
 CREATE INDEX IF NOT EXISTS ix_reviews_node ON reviews(nodeId, status);
@@ -371,6 +382,57 @@ export const store = {
     const nextNote = note === undefined ? (cur.explainNote || '') : (note || '');
     db.prepare('UPDATE variants SET explainStatus=?, explainNote=? WHERE sourceQuestionId=? AND version=?').run(nextStatus, nextNote, sourceQuestionId, version);
     return this.listVariants({ sourceQuestionId });
+  },
+  // ---- 變化題審查（逐審查人；可多人並存，另記歷史）----
+  listVariantReviews({ sourceQuestionId, reviewerId } = {}) {
+    const where = []; const params = [];
+    if (sourceQuestionId) { where.push('sourceQuestionId = ?'); params.push(sourceQuestionId); }
+    if (reviewerId) { where.push('reviewerId = ?'); params.push(reviewerId); }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return db.prepare(`SELECT sourceQuestionId, version, reviewerId, status, reason, explainStatus, explainNote, updatedAt
+                       FROM variant_reviews ${clause} ORDER BY updatedAt DESC`).all(...params);
+  },
+  upsertVariantReview({ sourceQuestionId, version, reviewerId, status, reason, explainStatus, explainNote }) {
+    const existing = db.prepare('SELECT * FROM variant_reviews WHERE sourceQuestionId=? AND version=? AND reviewerId=?').get(sourceQuestionId, version, reviewerId) || null;
+    const row = {
+      sourceQuestionId, version, reviewerId,
+      status: status === undefined ? (existing ? existing.status : null) : status,
+      reason: reason === undefined ? (existing ? existing.reason : null) : reason,
+      explainStatus: explainStatus === undefined ? (existing ? existing.explainStatus : null) : explainStatus,
+      explainNote: explainNote === undefined ? (existing ? existing.explainNote : null) : explainNote,
+      updatedAt: now(),
+    };
+    db.prepare(`INSERT INTO variant_reviews (sourceQuestionId,version,reviewerId,status,reason,explainStatus,explainNote,updatedAt)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(sourceQuestionId, version, reviewerId) DO UPDATE SET status=excluded.status, reason=excluded.reason, explainStatus=excluded.explainStatus, explainNote=excluded.explainNote, updatedAt=excluded.updatedAt`)
+      .run(row.sourceQuestionId, row.version, row.reviewerId, row.status, row.reason, row.explainStatus, row.explainNote, row.updatedAt);
+    const name = (this.getReviewer(reviewerId) || {}).name || reviewerId || '';
+    const log = (kind, fromV, toV, note) => {
+      if (String(fromV ?? '') === String(toV ?? '')) return;
+      db.prepare(`INSERT INTO variant_review_history (sourceQuestionId,version,reviewerId,reviewerName,kind,fromStatus,toStatus,note,at)
+                  VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(sourceQuestionId, version, reviewerId || '', name, kind, fromV ?? null, toV ?? null, note || '', now());
+    };
+    log('variant', existing ? existing.status : null, row.status, row.reason);
+    log('explain', existing ? existing.explainStatus : null, row.explainStatus, row.explainNote);
+    this.syncVariantAggregate(sourceQuestionId, version);
+    return this.listVariants({ sourceQuestionId });
+  },
+  // 由逐審查人結果彙總回 variants（調整優先於合格；未表態的欄位不動）
+  syncVariantAggregate(sourceQuestionId, version) {
+    const rows = db.prepare('SELECT status, reason, explainStatus, explainNote FROM variant_reviews WHERE sourceQuestionId=? AND version=?').all(sourceQuestionId, version);
+    const pick = (key) => rows.find((r) => r[key] === 'adjust') || rows.find((r) => r[key] === 'approved') || null;
+    const st = pick('status');
+    const ex = pick('explainStatus');
+    const sets = []; const params = [];
+    if (st) { sets.push('status=?', 'reason=?'); params.push(st.status, st.reason || ''); }
+    if (ex) { sets.push('explainStatus=?', 'explainNote=?'); params.push(ex.explainStatus || '', ex.explainNote || ''); }
+    if (sets.length) db.prepare(`UPDATE variants SET ${sets.join(', ')} WHERE sourceQuestionId=? AND version=?`).run(...params, sourceQuestionId, version);
+    if (st && st.status === 'approved') db.prepare("UPDATE variants SET status='superseded' WHERE sourceQuestionId=? AND version<>?").run(sourceQuestionId, version);
+  },
+  variantReviewHistory(sourceQuestionId) {
+    return db.prepare(`SELECT sourceQuestionId, version, reviewerId, reviewerName, kind, fromStatus, toStatus, note, at
+                       FROM variant_review_history WHERE sourceQuestionId=? ORDER BY id DESC`).all(sourceQuestionId);
   },
   listRevisions({ sourceQuestionId } = {}) {
     const where = sourceQuestionId ? 'WHERE sourceQuestionId=?' : '';
