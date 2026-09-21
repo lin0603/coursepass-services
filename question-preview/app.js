@@ -45,6 +45,12 @@ function correctIndex(a, n) {
   return -1;
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function tfBool(x) {
+  const t = String(x || '').trim();
+  if (/^(○|o|對|正確|是|√|true)$/i.test(t)) return true;
+  if (/^(╳|×|✕|x|錯|錯誤|否|false)$/i.test(t)) return false;
+  return null;
+}
 
 // 變化題數字呈現：與 App（MathML 分數）一致
 function mathTokens(expr) {
@@ -394,10 +400,12 @@ function variantAppHtml(it) {
     const key = variantKey(it.id, v.version);
     const play = state.play[key] || {};
     let body = '';
-    if (p.type === 'choice' && Array.isArray(p.options) && p.options.length) {
-      const ci = correctIndex(p.answer, p.options.length);
+    const tf = p.type === 'true_false';
+    const vopts = tf ? ['正確', '錯誤'] : (Array.isArray(p.options) ? p.options : []);
+    if (vopts.length && (p.type === 'choice' || tf)) {
+      const ci = tf ? (tfBool(p.answer) ? 0 : 1) : correctIndex(p.answer, vopts.length);
       const answered = play.choice != null;
-      const opts = p.options.map((o, i) => {
+      const opts = vopts.map((o, i) => {
         let cls = ''; const dis = !quiz;
         if (quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; }
         else if (!quiz && i === ci) cls = 'correct';
@@ -786,9 +794,10 @@ el.list.addEventListener('click', async (event) => {
     const st = section.querySelector('.var-state');
     st.textContent = '產生中…'; varGen.disabled = true;
     try {
+      const vtype = item.type === 'true_false' ? 'true_false' : (a.type || item.type);
       const res = await fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${REVIEWS_TOKEN}` },
-        body: JSON.stringify({ prompt: stripHtml(item.prompt), options: optionsOf(item), answer: deFull(item.answer), type: a.type || item.type, node: item.node, nodeName: item.nodeName, difficulty: item.difficulty, hasFigure: !!item.hasFigure, courseId: state.courseId || undefined }),
+        body: JSON.stringify({ prompt: stripHtml(item.prompt), options: vtype === 'true_false' ? [] : optionsOf(item), answer: deFull(item.answer), type: vtype, node: item.node, nodeName: item.nodeName, difficulty: item.difficulty, hasFigure: !!item.hasFigure, courseId: state.courseId || undefined }),
       });
       const r = await res.json();
       if (!res.ok) throw new Error(r.error || res.status);

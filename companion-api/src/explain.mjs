@@ -126,6 +126,7 @@ export async function regenerateExplanation(input = {}) {
 const VERIFY_SYSTEM = [
   '你是台灣國小數學老師。請「獨立」解出下面這道題，不要假設或沿用任何提示的答案。',
   '若為選擇題，answer 請直接給出你認為正確的那個選項的完整文字（不要只給 A/B/C/D，除非選項本身就是字母）。',
+  '若為是非題（敘述只有真假），answer 請只填「正確」或「錯誤」。',
   '另外請把「所有實際符合題目條件」的選項全部放進 all_correct（可能不只一個，例如題目問「介於 A 與 B 之間」，就要逐一檢查每個選項）。',
   '只輸出 JSON：{"answer":"...","all_correct":["選項1","選項2"],"reason":"一句話說明"}。',
 ].join('\n');
@@ -193,8 +194,9 @@ const VARIANT_SYSTEM = [
   '必須：同知識節點與同考點、同題型、難度相近（±1）、年級適齡、台灣小學用語、繁體中文。',
   '答案必須唯一且正確（請自行驗算）。不要逐字重製原題；不可改變考點。',
   '至少改變 2 個維度：數值/單位、情境、問法、選項與干擾項、呈現形式、順序。',
-  '只輸出 JSON：{"prompt":"...","options":["..."],"answer":"...","type":"choice|fill_blank","rationale":"為什麼這樣變（一句話）","figureNote":"若原題含圖，說明圖的處理"}。',
+  '只輸出 JSON：{"prompt":"...","options":["..."],"answer":"...","type":"choice|fill_blank|true_false","rationale":"為什麼這樣變（一句話）","figureNote":"若原題含圖，說明圖的處理"}。',
   '若為選擇題，answer 請直接寫出正確選項的「完整文字」，不要只寫編號（A/B/C/D 或 1/2/3）。',
+  '若原題為是非題（true_false）：type 用 "true_false"、options 給空陣列 []、prompt 寫一句可判斷真假的敘述、answer 只能是「正確」或「錯誤」。',
   '數學式請用純文字（分數寫 3/5、帶分數寫 1 3/5），不要使用 LaTeX 或 $...$。',
   '若原題含圖：請務必另外用 figure 指定「以模板重繪」的圖形（圖需與題意一致，且答案要能從圖/題判斷）。只能用這些模板與參數：',
   '- {"template":"number_line","params":{"min":0,"max":10,"step":1,"marks":[{"value":3,"label":"甲"}]}}',

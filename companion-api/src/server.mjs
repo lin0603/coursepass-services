@@ -319,11 +319,20 @@ function answerIndex(ans, opts) {
   if (av !== null) { const i = opts.findIndex((o) => { const v = numVal(o); return v !== null && Math.abs(v - av) < 1e-9; }); if (i >= 0) return i; }
   return -1;
 }
+function boolVal(x) {
+  const t = String(x || '').trim();
+  if (/^(○|o|對|正確|是|√|true)$/i.test(t)) return true;
+  if (/^(╳|×|✕|x|錯|錯誤|否|false)$/i.test(t)) return false;
+  return null;
+}
 function checkVariant(v, originalPrompt) {
   const reasons = [];
   const opts = Array.isArray(v.options) ? v.options.map((x) => String(x)).filter(Boolean) : [];
   if (!v.prompt) reasons.push('no_prompt');
   if (!v.answer) reasons.push('no_answer');
+  if (v.type === 'true_false') {
+    if (boolVal(v.answer) === null) reasons.push('answer_not_boolean');
+  }
   if (v.type === 'choice') {
     if (opts.length < 2) reasons.push('too_few_options');
     if (new Set(opts).size !== opts.length) reasons.push('dup_options');
@@ -361,6 +370,8 @@ const S2T = { 数: '數', 个: '個', 门: '門', 万: '萬', 与: '與', 为: '
 function t2t(z) { return String(z || '').replace(/[\u4e00-\u9fff]/g, (c) => S2T[c] || c); }
 function sameAnswer(a, b, opts) {
   if (!a || !b) return false;
+  const ba = boolVal(a); const bb = boolVal(b);
+  if (ba !== null && bb !== null) return ba === bb;
   const ca = answerCandidates(a, opts);
   const cb = answerCandidates(b, opts);
   if (ca.length && cb.length && ca.some((i) => cb.includes(i))) return true;
@@ -397,6 +408,7 @@ async function generateVariantRow(id, input) {
 const batchSchema = z.object({
   limit: z.number().int().min(1).max(300).optional(),
   courseId: z.string().max(64).optional(),
+  types: z.array(z.string().max(32)).optional(),
   concurrency: z.number().int().min(1).max(6).optional(),
 });
 app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
@@ -412,27 +424,30 @@ app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
   const latest = {};
   for (const v of store.listVariants({})) { const c = latest[v.sourceQuestionId]; if (!c || v.version > c.version) latest[v.sourceQuestionId] = v; }
   const curModel = config.geminiModel;
-  const adjust = []; const flagged = []; const legacy = []; const fresh = [];
+  const adjust = []; const flagged = []; const legacy = []; const fresh = []; const retarget = [];
+  const typesFilter = b.types && b.types.length ? new Set(b.types.map((t) => (t === 'multiple_choice' ? 'choice' : t))) : null;
   for (const q of items) {
     if (!q || !q.id || q.hasFigure) continue;
     const a = app[q.id] || {};
-    let type = a.type || q.type;
+    let type = q.type === 'true_false' ? 'true_false' : (a.type || q.type);
     if (type === 'multiple_choice') type = 'choice';
-    if (type !== 'choice' && type !== 'fill_blank') continue;
+    if (type !== 'choice' && type !== 'fill_blank' && type !== 'true_false') continue;
+    if (typesFilter && !typesFilter.has(type)) continue;
     const l = latest[q.id];
+    if (typesFilter && l && ((l.payload || {}).type || '') !== type) { retarget.push(q.id); continue; } // 指定題型：目前最新不是這題型 → 補這個題型
     if (l && l.status === 'approved') continue;                 // 已合格不動
     if (l && l.status === 'adjust') adjust.push(q.id);          // 1) 需調整：優先重生成
     else if (l && l.status === 'proposed' && (l.quality || {}).status === 'needs_review') flagged.push(q.id); // 2) 未複核且有疑義
     else if (l && l.status === 'proposed' && l.model && l.model !== curModel) legacy.push(q.id);              // 3) 舊模型生成：升級
     else if (!l) fresh.push(q.id);                              // 4) 尚未產生（新題）
   }
-  const picks = [...adjust, ...flagged, ...legacy, ...fresh].slice(0, limit);
+  const picks = [...retarget, ...adjust, ...flagged, ...legacy, ...fresh].slice(0, limit);
   let ok = 0; let nr = 0; let failed = 0;
   const queue = [...picks];
   const run = async (id) => {
     const q = byId.get(id); if (!q) return;
     const a = app[id] || {};
-    let type = a.type || q.type;
+    let type = q.type === 'true_false' ? 'true_false' : (a.type || q.type);
     if (type === 'multiple_choice') type = 'choice';
     try {
       const row = await generateVariantRow(id, {
@@ -444,7 +459,7 @@ app.post('/v1/variants/batch', asyncHandler(async (req, res) => {
   };
   const workers = Array.from({ length: b.concurrency || 3 }, async () => { while (queue.length) { const id = queue.shift(); await run(id); } });
   await Promise.all(workers);
-  res.json({ processed: picks.length, queuedAdjust: adjust.length, queuedFlagged: flagged.length, queuedLegacy: legacy.length, queuedNew: fresh.length, ok, needs_review: nr, failed, ids: picks });
+  res.json({ processed: picks.length, queuedRetarget: retarget.length, queuedAdjust: adjust.length, queuedFlagged: flagged.length, queuedLegacy: legacy.length, queuedNew: fresh.length, ok, needs_review: nr, failed, ids: picks });
 }));
 
 app.post('/v1/variants/:id/drop', (req, res) => {
