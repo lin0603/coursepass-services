@@ -435,8 +435,8 @@ function variantSideHtml(it) {
   const es = v.explainStatus || '';
   const st = es === 'approved' ? 'AI題解：合格' : (es === 'adjust' ? 'AI題解：需調整' : '待審');
   const review = `<div class="ai-review"><button type="button" class="rv-btn vexp-ok${es === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn vexp-adjust${es === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state vexp-state">${st}</span></div>
-      <input class="vexp-note rv-note-inline" placeholder="對Ai題解的意見（需調整時填寫）" value="${esc(v.explainNote || '')}">
-      <div class="var-save-row"><button type="button" class="mini-btn vexp-save">儲存註解</button><span class="ai-state vexp-save-state"></span></div>`;
+      <textarea class="vexp-note rv-note-inline" rows="4" placeholder="對Ai題解的意見（需調整時填寫）">${esc(v.explainNote || '')}</textarea>
+      <div class="var-save-row">${ex ? `<button type="button" class="mini-btn vexp-copy" data-vkey="${esc(ekey)}">複製解題內容到意見框</button>` : ''}<button type="button" class="mini-btn vexp-save">儲存註解</button><span class="ai-state vexp-save-state"></span></div>`;
   return `<section class="variant-side" data-id="${esc(it.id)}">
     <div class="app-head">變化題Ai解題（新題）· v${v.version} <span class="app-label">${esc(v.payload.type || '')}</span></div>
     ${explain}${review}
@@ -838,6 +838,14 @@ el.list.addEventListener('click', async (event) => {
       if (!varOk) { const inp = section.querySelector('.var-reason'); if (inp) inp.value = ''; }
       render();
     } catch (e) { alert('儲存失敗：' + e.message); }
+    return;
+  }
+  const vexpCopy = event.target.closest('.vexp-copy');
+  if (vexpCopy) {
+    const section = vexpCopy.closest('[data-id]');
+    const ta = section.querySelector('.vexp-note');
+    const text = state.explanations[vexpCopy.dataset.vkey] || '';
+    if (ta && text) { ta.value = text; ta.focus(); }
     return;
   }
   const vexpSave = event.target.closest('.vexp-save');

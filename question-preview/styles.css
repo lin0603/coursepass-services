@@ -227,6 +227,8 @@ img.q-fig { display: block; max-width: 100%; margin: 6px 0; background: #fff; bo
 .ai-review { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .ai-review-state { font-size: 12px; color: #236251; }
 .rv-note-inline { width: 100%; margin-top: 6px; border: 1px solid #bed4d7; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; }
+.vexp-note { min-height: 96px; resize: vertical; line-height: 1.5; }
+.var-save-row .mini-btn.vexp-copy { background: #e4f3ee; color: #087e8b; border: 1px solid #bcdcd6; }
 .rev-actions { display: flex; gap: 8px; margin-top: 6px; }
 
 /* 題目原圖放大（限制在左欄，不覆蓋 App 模擬區） */
