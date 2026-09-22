@@ -46,6 +46,26 @@ function correctIndex(a, n) {
   return -1;
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+// 把答案（文字）對到選項位置：先比對選項文字，再退回合法的標籤（A/B/1/①/○╳）
+function optionIndexOf(answer, opts) {
+  const list = opts || [];
+  const norm = (z) => String(z ?? '').replace(/\s+/g, '').replace(/[（(]([A-Ha-h]|[1-8])[）)]/g, '').replace(/[.。、,，:：]$/, '');
+  const a = norm(answer);
+  if (a) { const i = list.map(norm).indexOf(a); if (i >= 0) return i; }
+  const s = String(answer ?? '').trim();
+  if (/^(?:[A-Ha-h]|[1-8]|[①-⑧]|[○oO是對√正]|[╳×xX否錯])$/.test(s)) {
+    const ci = correctIndex(s, list.length);
+    if (ci >= 0 && ci < list.length) return ci;
+  }
+  return -1;
+}
+// 原題 App 呈現的正解位置：優先用後端算好的 correctIndex，否則用文字/標籤推算
+function resolveAppCorrectIndex(it, a) {
+  const opts = a.options || [];
+  if (Number.isInteger(a.correctIndex) && a.correctIndex >= 0 && a.correctIndex < opts.length) return a.correctIndex;
+  if (a.correctValue) { const i = optionIndexOf(a.correctValue, opts); if (i >= 0) return i; }
+  return optionIndexOf(String(it.answer ?? ''), opts);
+}
 function tfBool(x) {
   const t = String(x || '').trim();
   if (/^(○|o|對|正確|是|√|true)$/i.test(t)) return true;
@@ -363,17 +383,18 @@ function hintHtml(it) {
 function choiceHtml(it, a, quiz) {
   const play = state.play[it.id] || {};
   const answered = play.choice != null;
+  const ci = resolveAppCorrectIndex(it, a);
   const opts = (a.options || []).map((_, i) => {
     let cls = '';
     let dis = !quiz;
-    if (quiz && answered) { if (i === a.correctIndex) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; dis = true; }
-    else if (!quiz && i === a.correctIndex) cls = 'correct';
+    if (ci >= 0 && quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; dis = true; }
+    else if (ci >= 0 && !quiz && i === ci) cls = 'correct';
     return `<button type="button" class="app-btn ${cls}" data-choice="${i}" data-qid="${esc(it.id)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${(a.optionsHtml && a.optionsHtml[i]) || esc(a.options[i])}</span></button>`;
   }).join('');
   let fb = '';
   if (quiz && answered) {
-    const ok = play.choice === a.correctIndex;
-    fb = ok ? '<p class="app-feedback">答對了！</p>' : `<p class="app-feedback bad">答錯了，正解是 ${LETTERS[a.correctIndex]}</p>${hintHtml(it)}`;
+    const ok = ci >= 0 && play.choice === ci;
+    fb = ok ? '<p class="app-feedback">答對了！</p>' : `<p class="app-feedback bad">答錯了${ci >= 0 ? `，正解是 ${LETTERS[ci]}` : '（此題正解無法對應到選項）'}</p>${hintHtml(it)}`;
   }
   return `<div class="app-opts">${opts}</div>${fb}`;
 }
@@ -426,15 +447,16 @@ function variantAppHtml(it) {
     const tf = p.type === 'true_false';
     const vopts = tf ? ['正確', '錯誤'] : (Array.isArray(p.options) ? p.options : []);
     if (vopts.length && (p.type === 'choice' || tf)) {
-      const ci = tf ? (tfBool(p.answer) ? 0 : 1) : correctIndex(p.answer, vopts.length);
+      const ci = tf ? (tfBool(p.answer) === true ? 0 : (tfBool(p.answer) === false ? 1 : -1)) : optionIndexOf(p.answer, vopts);
       const answered = play.choice != null;
       const opts = vopts.map((o, i) => {
         let cls = ''; const dis = !quiz;
-        if (quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; }
-        else if (!quiz && i === ci) cls = 'correct';
+        if (ci >= 0 && quiz && answered) { if (i === ci) cls = 'correct'; else if (i === play.choice) cls = 'wrong'; }
+        else if (ci >= 0 && !quiz && i === ci) cls = 'correct';
         return `<button type="button" class="app-btn ${cls}" data-vopt="${i}" data-vkey="${esc(key)}"${dis ? ' disabled' : ''}><b>${LETTERS[i]}</b><span>${vmath(o)}</span></button>`;
       }).join('');
-      body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${play.choice === ci ? '' : ' bad'}">${play.choice === ci ? '答對了！' : `答錯了，正解是 ${LETTERS[ci]}`}</p>${play.choice === ci ? '' : variantHint(key)}<div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>` : ''}`;
+      const ok = ci >= 0 && play.choice === ci;
+      body = `<div class="app-opts">${opts}</div>${quiz && answered ? `<p class="app-feedback${ok ? '' : ' bad'}">${ok ? '答對了！' : (ci >= 0 ? `答錯了，正解是 ${LETTERS[ci]}` : '答錯了（此題正解無法對應到選項）')}</p>${ok ? '' : variantHint(key)}<div class="app-redo-row"><button type="button" class="app-redo" data-vkey="${esc(key)}">再答一次</button></div>` : ''}`;
       if (!quiz) body += `<p class="app-correct">答案：${vmath(String(p.answer || ''))}</p>`;
     } else {
       body = `<div class="app-fill1"><input class="app-input app-fill-input" data-vkey="${esc(key)}" value="${esc(play.fill || '')}" placeholder="輸入答案"><button type="button" class="app-check" data-vkey="${esc(key)}">檢查</button></div>`;
@@ -640,7 +662,7 @@ function render() {
   const frag = document.createDocumentFragment();
   for (const it of slice) {
     const opts = optionsOf(it);
-    const ci = correctIndex(it.answer, opts.length);
+    const ci = optionIndexOf(it.answer, opts);
     const rev = reviewOf(it.id);
     const card = document.createElement('article');
     card.className = 'card ' + (it.status === 'approved' ? 'ok' : 'warn');
