@@ -21,6 +21,7 @@ const el = {
   assignPanel: document.getElementById('assignPanel'),
   viewAll: document.getElementById('viewAll'),
   viewMine: document.getElementById('viewMine'),
+  viewReviewed: document.getElementById('viewReviewed'),
   viewQueue: document.getElementById('viewQueue'),
   loginGate: document.getElementById('loginGate'),
   loginCode: document.getElementById('loginCode'),
@@ -126,6 +127,13 @@ function setVariantReviewLocal(id, version, patch) {
   const k = variantKey(id, version);
   const g = (state.variantReviews[k] = state.variantReviews[k] || {});
   g[state.me] = { ...(g[state.me] || {}), ...patch, reviewerId: state.me, updatedAt: new Date().toISOString() };
+}
+// 我是否審過這題（原題審查或變化題本體／AI題解審查任一）
+function hasMyReview(id) {
+  if ((state.qreviews[id] || []).some((r) => r.reviewerId === state.me)) return true;
+  const v = (state.variants[id] || [])[0];
+  if (v) { const m = myVariantReview(id, v.version); if (m.status || m.reason || m.explainStatus || m.explainNote) return true; }
+  return false;
 }
 function reviewerName(id) { const r = state.reviewers.find((x) => x.id === id); return r ? r.name : (id ? id : '未指定'); }
 function assignmentsOf(id) { return state.assignments[id] || []; }
@@ -410,7 +418,6 @@ function variantAppHtml(it) {
     </details>`;
   }
   let inner = '<div class="app-prompt"><span class="app-none">尚未產生變化題</span></div>';
-  let review = '';
   if (v) {
     const p = v.payload || {};
     const key = variantKey(it.id, v.version);
@@ -438,17 +445,8 @@ function variantAppHtml(it) {
     const showNote = p.figureNote && !/無圖|無需作圖|不需作圖/.test(String(p.figureNote));
     const fig = p.figureSvg ? `<div class="app-fig-svg">${p.figureSvg}</div>` : (showNote ? `<p class="app-hint">圖：${esc(p.figureNote)}</p>` : '');
     inner = `<div class="app-prompt">${vmath(p.prompt || '')}</div>${fig}${body}${qual}`;
-    const mine = myVariantReview(it.id, v.version);
-    const st = !state.me ? '請先選審查人' : (mine.status === 'approved' ? '你：合格' : (mine.status === 'adjust' ? '你：需調整' : '你尚未審'));
-    const others = othersVariantReviews(it.id, v.version);
-    const othersBox = others.length ? `<div class="rv-others"><div class="title">其他審查人意見</div>${others.map((r) => `<div class="rv-other"><span class="who">${esc(reviewerName(r.reviewerId))}</span><span class="tag ${r.status || 'none'}">${REVIEW_LABELS[r.status] || '未設定'}</span><span class="note">${esc(r.reason || '')}</span></div>`).join('')}</div>` : '';
-    review = `<div class="ai-review"><button type="button" class="rv-btn var-ok${mine.status === 'approved' ? ' on' : ''}">合格</button><button type="button" class="rv-btn var-adjust${mine.status === 'adjust' ? ' on' : ''}">需調整</button><span class="ai-review-state">${st}</span></div>
-      <input class="var-reason rv-note-inline" placeholder="對變化題的意見（需調整時填寫）" value="${esc(mine.reason || '')}">
-      <div class="var-save-row"><button type="button" class="mini-btn var-save">儲存註解</button><span class="ai-state var-save-state"></span><button type="button" class="mini-btn var-history">查看審查歷史</button></div>
-      ${othersBox}
-      <div class="rv-history-box" hidden></div>`;
   }
-  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div>${review}</section>`;
+  return `<section class="app-view app-variant" data-id="${esc(it.id)}">${head}${btn}<div class="app-phone">${inner}</div></section>`;
 }
 
 // 變化題側欄：AI 解新題 + 對 AI 題解的審查（放在 AI 改寫建議上方）
@@ -633,6 +631,9 @@ function render() {
     list = list.filter((it) => order.has(it.id)).sort((a, b) => order.get(a.id) - order.get(b.id));
   } else if (state.view === 'queue') {
     list = list.filter((it) => state.explanationQueue[it.id]);
+  } else if (state.view === 'reviewed') {
+    if (!state.me) { el.subtitle.textContent = '請先選擇審查人'; el.list.innerHTML = '<p class="app-none">請先在上方「審查人」選擇你的名字。</p>'; return; }
+    list = list.filter((it) => hasMyReview(it.id));
   }
   el.list.innerHTML = '';
   const slice = list.slice(0, state.limit);
@@ -699,6 +700,8 @@ function render() {
     el.subtitle.textContent = `我的待審 ${list.length.toLocaleString()} 題 · 已審 ${done} 題`;
   } else if (state.view === 'queue') {
     el.subtitle.textContent = `AI 需重審 ${list.length.toLocaleString()} 題`;
+  } else if (state.view === 'reviewed') {
+    el.subtitle.textContent = `我已審過 ${list.length.toLocaleString()} 題`;
   } else {
     el.subtitle.textContent = `全部 ${state.items.length.toLocaleString()} 題 · 符合 ${list.length.toLocaleString()} 題`;
   }
@@ -1032,10 +1035,16 @@ el.list.addEventListener('click', async (event) => {
     if (!box.hidden) { box.hidden = true; return; }
     box.hidden = false; box.textContent = '載入中…';
     try {
-      const d = await (await fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}/history`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } })).json();
-      const items = d.items || [];
-      box.innerHTML = items.length
-        ? items.map((h) => `<div class="rv-hist">${esc((h.at || '').replace('T', ' ').slice(0, 16))}　${esc(h.reviewerName || h.reviewerId || '未署名')}　${REVIEW_LABELS[h.fromStatus || ''] || '未設定'} → ${REVIEW_LABELS[h.toStatus || ''] || '未設定'}${h.toType ? `　題型→${esc(typeLabel(h.toType))}` : ''}${h.note ? `　「${esc(h.note)}」` : ''}</div>`).join('')
+      const [q, v] = await Promise.all([
+        fetch(`${REVIEWS_API}/v1/reviews/${encodeURIComponent(id)}/history`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+        fetch(`${REVIEWS_API}/v1/variants/${encodeURIComponent(id)}/history`, { headers: { Authorization: `Bearer ${REVIEWS_TOKEN}` } }).then((r) => r.json()).catch(() => ({ items: [] })),
+      ]);
+      const rows = [
+        ...(q.items || []).map((h) => ({ at: h.at, name: h.reviewerName || h.reviewerId || '未署名', tag: '原題', from: h.fromStatus, to: h.toStatus, extra: h.toType ? `　題型→${typeLabel(h.toType)}` : '', note: h.note })),
+        ...(v.items || []).map((h) => ({ at: h.at, name: h.reviewerName || h.reviewerId || '未署名', tag: h.kind === 'explain' ? 'AI題解' : '變化題', from: h.fromStatus, to: h.toStatus, extra: '', note: h.note })),
+      ].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+      box.innerHTML = rows.length
+        ? rows.map((h) => `<div class="rv-hist">${esc((h.at || '').replace('T', ' ').slice(0, 16))}　${esc(h.name)}　【${h.tag}】　${REVIEW_LABELS[h.from || ''] || '未設定'} → ${REVIEW_LABELS[h.to || ''] || '未設定'}${h.extra}${h.note ? `　「${esc(h.note)}」` : ''}</div>`).join('')
         : '（尚無歷史）';
     } catch (e) { box.textContent = '失敗：' + e.message; }
     return;
@@ -1343,11 +1352,13 @@ const setMatchView = (v) => {
   state.view = v; state.limit = 100;
   if (el.viewAll) el.viewAll.classList.toggle('on', v === 'all');
   if (el.viewMine) el.viewMine.classList.toggle('on', v === 'mine');
+  if (el.viewReviewed) el.viewReviewed.classList.toggle('on', v === 'reviewed');
   if (el.viewQueue) el.viewQueue.classList.toggle('on', v === 'queue');
   render();
 };
 if (el.viewAll) el.viewAll.addEventListener('click', () => setMatchView('all'));
 if (el.viewMine) el.viewMine.addEventListener('click', () => setMatchView('mine'));
+if (el.viewReviewed) el.viewReviewed.addEventListener('click', () => setMatchView('reviewed'));
 if (el.viewQueue) el.viewQueue.addEventListener('click', () => setMatchView('queue'));
 el.assignPanel.addEventListener('click', (e) => {
   if (e.target.id === 'asgPreview') runAssign(true);
