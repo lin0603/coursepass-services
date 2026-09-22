@@ -64,16 +64,14 @@ export function toActivity(question, { llmMap, typeOverrides } = {}) {
   let options = rawOptions.map(optionText).filter((o) => o !== '');
   let answer = question.answer;
 
-  // 是非題（或答案記成 ○/╳ 但選項空的題）→ 選擇題，合成「正確 / 錯誤」
+  // 是非題（答案 ○/╳ 且沒有選項）→ 合成「正確 / 錯誤」；若已帶選項（有些題被標成 true_false）則照原選項當選擇題
   const truth = isTrueAnswer(question.answer);
   let synthesized = false;
-  if (rawType === 'true_false' || (type === 'choice' && options.length < 2)) {
-    if (rawType === 'true_false' || truth !== null) {
-      synthesized = true;
-      type = 'choice';
-      options = ['正確', '錯誤'];
-      answer = truth === null ? '' : (truth ? '正確' : '錯誤');
-    }
+  if (options.length < 2 && (rawType === 'true_false' || truth !== null)) {
+    synthesized = true;
+    type = 'choice';
+    options = ['正確', '錯誤'];
+    answer = truth === null ? '' : (truth ? '正確' : '錯誤');
   }
 
   let correctIndex = null;
