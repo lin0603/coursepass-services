@@ -57,6 +57,7 @@ app.get('/v1/units/:id/activities', asyncHandler(async (req, res) => {
   const reviewStatus = req.query.reviewStatus || (req.query.allowReviewRequired === '1' ? undefined : 'approved');
   const data = await knowledge.questions(req.params.id, { limit, offset: Number(req.query.offset) || 0, reviewStatus, type: req.query.type });
   const items = data.items.map((q) => ({ ...q, primaryKnowledgeNodeId: q.primaryKnowledgeNodeId || req.params.id }));
+  const llmMap = await getLlmVariants();
   res.json({ unitId: req.params.id, total: data.total, items: assemble(items, { llmMap, typeOverrides: store.typeOverrides() }) });
 }));
 
@@ -75,6 +76,7 @@ app.get('/v1/units/:id/activity-set', asyncHandler(async (req, res) => {
     if (!Array.isArray(chunk.items) || chunk.items.length < 200) break;
     offset += 200;
   }
+  const llmMap = await getLlmVariants();
   res.json({ unitId: req.params.id, count, total, items: buildActivitySet(pool, { count, llmMap, typeOverrides: store.typeOverrides() }) });
 }));
 
@@ -135,7 +137,7 @@ app.get('/v1/units/:id/placement', asyncHandler(async (req, res) => {
       if (items.length >= limit) break;
     }
   }
-  res.json({ unitId: req.params.id, subject: node.subject, grade: node.grade, items: assemble(items, { llmMap, typeOverrides: store.typeOverrides() }) });
+  res.json({ unitId: req.params.id, subject: node.subject, grade: node.grade, items: assemble(items, { llmMap: await getLlmVariants(), typeOverrides: store.typeOverrides() }) });
 }));
 
 // --- Learner state ---
