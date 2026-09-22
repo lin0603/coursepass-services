@@ -237,13 +237,13 @@ app.get('/v1/explanations', (_req, res) => {
 const reviewSchema = z.object({
   status: z.enum(['pending', 'approved', 'adjust', 'rejected']).optional(),
   note: z.string().max(2000).optional(),
-  type: z.string().max(32).optional(),
+  type: z.string().max(32).nullish(),
   typeMismatch: z.boolean().optional(),
-  nodeId: z.string().max(64).optional(),
-  reviewerId: z.string().max(64).optional(),
-  courseId: z.string().max(64).optional(),
+  nodeId: z.string().max(64).nullish(),
+  reviewerId: z.string().max(64).nullish(),
+  courseId: z.string().max(64).nullish(),
   aiStatus: z.enum(['', 'approved', 'adjust']).optional(),
-  aiNote: z.string().max(2000).optional(),
+  aiNote: z.string().max(2000).nullish(),
 });
 
 // 匯出（給 AI 後續優化題目用）：結構化審查意見

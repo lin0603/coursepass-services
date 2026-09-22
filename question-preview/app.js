@@ -735,7 +735,8 @@ function fill(sel, values, label) {
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 async function saveReview(id, nodeId, status, note, type, typeMismatch, aiStatus, aiNote) {
-  const payload = { note, nodeId, type: type || '', typeMismatch: !!typeMismatch, reviewerId: state.me || '', courseId: state.courseId || undefined };
+  const payload = { note, type: type || '', typeMismatch: !!typeMismatch, reviewerId: state.me || '', courseId: state.courseId || undefined };
+  if (nodeId) payload.nodeId = nodeId;
   if (aiStatus !== undefined) payload.aiStatus = aiStatus;
   if (aiNote !== undefined) payload.aiNote = aiNote;
   if (status) payload.status = status; // 空字串會被後端視為非法 enum，省略
