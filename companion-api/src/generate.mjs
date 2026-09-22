@@ -173,7 +173,8 @@ function shuffle(items) {
 // --- 關係符號（＝ ＞ ＜ ≥ ≤ ≠）---
 const RELOP_CANON = { '＝': '=', '=': '=', '＞': '>', '>': '>', '＜': '<', '<': '<', '≥': '≥', '≤': '≤', '≠': '≠' };
 const RELOP_DISPLAY = { '=': '＝', '>': '＞', '<': '＜', '≥': '≥', '≤': '≤', '≠': '≠' };
-const RELOP_POOL = ['=', '>', '<', '≥', '≤', '≠'];
+// 「填入＞、＜或＝」類題目只能從這三個互斥符號出選項；不可放 ≥/≤/≠（會產生多個也成立的答案）
+const RELOP_POOL = ['=', '>', '<'];
 
 export function parseRelop(raw) {
   const t = stripNote(raw).trim();
@@ -306,8 +307,7 @@ export function toChoiceVariant(question, { count = 4 } = {}) {
   // 1) 關係符號（＝ ＞ ＜ …）
   const relop = parseRelop(raw);
   if (relop) {
-    const distract = RELOP_POOL.filter((s) => s !== relop).slice(0, count);
-    if (distract.length < count) return null;
+    const distract = RELOP_POOL.filter((s) => s !== relop);
     const mixed = shuffle([relop, ...distract].map((s) => ({
       label: RELOP_DISPLAY[s], html: escapeHtml(RELOP_DISPLAY[s]), isCorrect: s === relop,
     })));
