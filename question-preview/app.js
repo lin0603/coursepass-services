@@ -174,7 +174,7 @@ function assignHtml(id) {
 
 // 可選題型（活動層）與「建議題型」
 const TYPES = [['choice', '點選'], ['fill_blank', '填空'], ['word_order', '排序'], ['matching', '連連看'], ['listening', '聽力']];
-const TYPE_EXTRA = { sentence: '造句題', short_answer: '簡答題', essay: '寫作題', true_false: '是非題', multiple_choice: '選擇題', speaking: '口說題' };
+const TYPE_EXTRA = { sentence: '造句題', short_answer: '簡答題', essay: '寫作題', true_false: '是非題', multiple_choice: '選擇題', speaking: '口說題', handwriting: '手寫題' };
 const TYPE_FROM_BANK = { matching: 'matching', choice: 'choice', multiple_choice: 'choice', true_false: 'choice', fill_blank: 'fill_blank', short_answer: 'fill_blank', word_order: 'word_order', listening: 'listening' };
 function suggestedTypeOf(it) {
   const a = state.appdata[it.id];
@@ -515,6 +515,9 @@ function appViewHtml(it) {
   } else if (a.type === 'listening' || a.type === 'word_order' || a.type === 'speaking') {
     body = `<p class="app-none">App 尚未支援此題型（${esc(a.type)}）</p>`
       + ((!quiz && a.answer) ? `<p class="app-correct">答案：${esc(String(a.answer))}</p>` : '');
+  } else if (a.type === 'handwriting') {
+    const q = new URLSearchParams({ target: a.target || '', script: a.script || '', grid: a.grid || '', prompt: String(it.prompt || '') }).toString();
+    body = `<iframe title="手寫練習" src="https://resource-files-dev.starxinteractive.com/preview/handwriting.html?${q}" style="width:100%;height:420px;border:0;border-radius:10px;background:#fff"></iframe>`;
   } else if (a.accept && a.accept.length) {
     body = fillHtml(it, a, quiz);
   } else if (quiz) {
