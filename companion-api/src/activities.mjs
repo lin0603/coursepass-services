@@ -25,7 +25,7 @@ export function activityType(questionType) {
 }
 
 function isTrueAnswer(value) {
-  const text = String(value ?? '').trim();
+  const text = deFull(String(value ?? '').trim());
   if (!text) return null;
   if (/[○oO是對√正]|^1$/.test(text)) return true;
   if (/[╳×xX否錯]|^2$/.test(text)) return false;
@@ -40,19 +40,22 @@ export function optionText(option) {
   return String(option ?? '').trim();
 }
 
+// 全形數字 → 半形（國語題庫常以「１」「２」存答案，未正規化會讓 Number() 變 NaN）
+const deFull = (s) => String(s ?? '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248));
+
 // 由 option.isCorrect / answer(1-based index、label、選項文字) 推出 0-based correctIndex。
 export function resolveCorrectIndex(options, rawOptions, answer) {
   const flagged = rawOptions.findIndex((o) => o && typeof o === 'object' && o.isCorrect === true);
   if (flagged >= 0) return flagged;
-  const n = Number(String(answer ?? '').trim());
+  const n = Number(deFull(String(answer ?? '').trim()));
   if (Number.isInteger(n) && n >= 1 && n <= options.length) return n - 1;
-  const label = String(answer ?? '').trim().toUpperCase();
+  const label = deFull(String(answer ?? '').trim()).toUpperCase();
   if (/^[A-Z]$/.test(label)) {
     const i = rawOptions.findIndex((o) => o && typeof o === 'object' && String(o.label ?? '').toUpperCase() === label);
     if (i >= 0) return i;
   }
   const text = String(answer ?? '').trim();
-  const i = options.findIndex((o) => o === text);
+  const i = options.findIndex((o) => o === text || deFull(o) === deFull(text));
   return i >= 0 ? i : null;
 }
 
