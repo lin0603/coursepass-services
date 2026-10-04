@@ -33,8 +33,6 @@ const el = {
 };
 let moreObserver = null;
 const LETTERS = 'ABCDEFGH';
-const TYPE_LABELS = { choice: '選擇題', multiple_choice: '選擇題', true_false: '是非題', fill_blank: '填空題', short_answer: '簡答題', matching: '連連看', word_order: '排序題', ordering: '排序題', listening: '聽力題', speaking: '口說題', essay: '寫作題', sentence: '造句題' };
-const typeLabel = (t) => TYPE_LABELS[t] || t || '';
 const REVIEW_LABELS = { '': '未設定', approved: '合格', adjust: '需調整', rejected: '不採用', pending: '待審' };
 const deFull = (s) => String(s ?? '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248));
 function correctIndex(a, n) {
@@ -176,6 +174,7 @@ function assignHtml(id) {
 
 // 可選題型（活動層）與「建議題型」
 const TYPES = [['choice', '點選'], ['fill_blank', '填空'], ['word_order', '排序'], ['matching', '連連看'], ['listening', '聽力']];
+const TYPE_EXTRA = { sentence: '造句題', short_answer: '簡答題', essay: '寫作題', true_false: '是非題', multiple_choice: '選擇題', speaking: '口說題' };
 const TYPE_FROM_BANK = { matching: 'matching', choice: 'choice', multiple_choice: 'choice', true_false: 'choice', fill_blank: 'fill_blank', short_answer: 'fill_blank', word_order: 'word_order', listening: 'listening' };
 function suggestedTypeOf(it) {
   const a = state.appdata[it.id];
@@ -188,7 +187,7 @@ function suggestedTypeOf(it) {
   }
   return TYPE_FROM_BANK[it.type] || 'choice';
 }
-function typeLabel(t) { const f = TYPES.find((x) => x[0] === t); return f ? f[1] : t; }
+function typeLabel(t) { const f = TYPES.find((x) => x[0] === t) || TYPE_EXTRA[t] && [t, TYPE_EXTRA[t]]; return f ? f[1] : t; }
 
 // 以 CSS 從原圖裁切出元件（box = [ymin,xmin,ymax,xmax], 0–1000）
 function cropBg(img, box) {
