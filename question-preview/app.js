@@ -517,7 +517,7 @@ function appViewHtml(it) {
       + ((!quiz && a.answer) ? `<p class="app-correct">答案：${esc(String(a.answer))}</p>` : '');
   } else if (a.type === 'handwriting') {
     const q = new URLSearchParams({ target: a.target || '', script: a.script || '', grid: a.grid || '', prompt: String(it.prompt || '') }).toString();
-    body = `<iframe title="手寫練習" src="https://resource-files-dev.starxinteractive.com/preview/handwriting.html?${q}" style="width:100%;height:420px;border:0;border-radius:10px;background:#fff"></iframe>`;
+    body = `<iframe title="手寫練習" src="https://resource-files-dev.starxinteractive.com/preview/handwriting.html?${q}&v=2" style="width:100%;height:420px;border:0;border-radius:10px;background:#fff"></iframe>`;
   } else if (a.accept && a.accept.length) {
     body = fillHtml(it, a, quiz);
   } else if (quiz) {
