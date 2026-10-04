@@ -13,6 +13,7 @@ const ACTIVITY_BY_TYPE = {
   fill_blank: 'fill_blank',
   short_answer: 'fill_blank',
   essay: 'fill_blank',
+  sentence: 'fill_blank',
   matching: 'matching',
   ordering: 'word_order',
   word_order: 'word_order',
@@ -27,8 +28,8 @@ export function activityType(questionType) {
 function isTrueAnswer(value) {
   const text = deFull(String(value ?? '').trim());
   if (!text) return null;
-  if (/[○oO是對√正]|^1$/.test(text)) return true;
-  if (/[╳×xX否錯]|^2$/.test(text)) return false;
+  if (/^(○|o|O|是|對|√|正|正確)$/.test(text) || text === '1') return true;
+  if (/^(╳|×|✕|x|X|錯|錯誤|否)$/.test(text) || text === '2') return false;
   return null;
 }
 

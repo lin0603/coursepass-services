@@ -33,6 +33,8 @@ const el = {
 };
 let moreObserver = null;
 const LETTERS = 'ABCDEFGH';
+const TYPE_LABELS = { choice: '選擇題', multiple_choice: '選擇題', true_false: '是非題', fill_blank: '填空題', short_answer: '簡答題', matching: '連連看', word_order: '排序題', ordering: '排序題', listening: '聽力題', speaking: '口說題', essay: '寫作題', sentence: '造句題' };
+const typeLabel = (t) => TYPE_LABELS[t] || t || '';
 const REVIEW_LABELS = { '': '未設定', approved: '合格', adjust: '需調整', rejected: '不採用', pending: '待審' };
 const deFull = (s) => String(s ?? '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248));
 function correctIndex(a, n) {
@@ -505,7 +507,7 @@ function appViewHtml(it) {
       <div class="app-phone"><div class="app-prompt">${prompt}</div><p class="app-none">未進入 App（不在活動集）</p></div></section>`;
   }
   const quiz = state.appMode !== 'answer';
-  const label = a.mode === 'choice' ? `點選題 · ${a.options.length} 選項 · ${esc(a.generator || '')}` : `直映 · ${esc(a.type)} · ${esc(a.generator || 'direct')}`;
+  const label = a.mode === 'choice' ? `點選題 · ${a.options.length} 選項 · ${esc(a.generator || '')}` : `直映 · ${esc(typeLabel(a.type))} · ${esc(a.generator || 'direct')}`;
   let body = '';
   if (a.mode === 'choice' || a.type === 'choice') {
     body = choiceHtml(it, a, quiz);
@@ -671,7 +673,7 @@ function render() {
       <div class="head">
         <span class="no">#${it.n}</span>
         <span class="id">${esc(it.id)}</span>
-        <span class="badge type">${esc(it.type)}</span>
+        <span class="badge type">${esc(typeLabel(it.type))}</span>
         <span class="badge ${it.status === 'approved' ? 'good' : 'bad'}">${esc(it.status)}</span>
         <span class="badge node">${esc(it.node || '未綁定')} ${esc(it.nodeName || '')}</span>
         <span class="badge diff">難度 ${esc(it.difficulty ?? '')}</span>
