@@ -6,6 +6,7 @@ RUN apt-get update \
 
 WORKDIR /srv
 COPY server.py /srv/server.py
-ENV PORT=8391
+ENV PORT=8391 HOME=/tmp
 EXPOSE 8391
+USER 65534:65534
 CMD ["python3", "/srv/server.py"]
