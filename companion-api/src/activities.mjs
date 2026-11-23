@@ -4,7 +4,9 @@ import { escapeHtml, htmlForValue, parseAnswer, splitValues, stripNote, toChoice
 
 function fileUrl(rel) {
   if (!rel) return null;
-  return `${config.filesBase}/${String(rel).split('/').map(encodeURIComponent).join('/')}`;
+  const segments = String(rel).split('/');
+  const base = ['iso', 'zip'].includes(segments[0]) ? config.archiveFilesBase : config.filesBase;
+  return `${base}/${segments.map(encodeURIComponent).join('/')}`;
 }
 
 const ACTIVITY_BY_TYPE = {

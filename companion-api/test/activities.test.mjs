@@ -156,3 +156,18 @@ test('imageUrl is absolutized and figure passthrough works', () => {
   assert.equal(a.figureUrl, 'https://files.example.com/figures-drawn/x.svg');
   assert.equal(a.chapter, '五上 ・ 第四單元 ・ 4-4');
 });
+
+
+test('retained archives can use a separate origin from regular resources', async () => {
+  const { config } = await import('../src/config.mjs');
+  const previous = config.archiveFilesBase;
+  config.archiveFilesBase = 'https://archive.example.com';
+  try {
+    const image = (imageUrl) => toActivity({ ...base, questionType: 'fill_blank', answer: '1', imageUrl }).imageUrl;
+    assert.equal(image('iso/assets/q 1.png'), 'https://archive.example.com/iso/assets/q%201.png');
+    assert.equal(image('zip/assets/q.png'), 'https://archive.example.com/zip/assets/q.png');
+    assert.equal(image('figures/q.svg'), 'https://files.example.com/figures/q.svg');
+  } finally {
+    config.archiveFilesBase = previous;
+  }
+});

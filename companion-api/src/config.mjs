@@ -9,6 +9,9 @@ export const config = {
   filesBase: (process.env.FILES_BASE || 'https://resource-files-dev.starxinteractive.com').replace(/\/$/, ''),
 };
 
+// Files retained on the archive host can use a separate browser-accessible base.
+config.archiveFilesBase = (process.env.ARCHIVE_FILES_BASE || config.filesBase).replace(/\/$/, '');
+
 // LLM 誘答變體（離線生成、放 resource-files）。
 config.llmVariantsUrl = process.env.LLM_VARIANTS_URL || `${config.filesBase}/preview/llm-variants.json`;
 
